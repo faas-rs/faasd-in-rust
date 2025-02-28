@@ -20,6 +20,7 @@ pub struct FaasHandler<S> {
     pub telemetry: S,
 }
 
+#[derive(Debug, Clone)]
 pub struct FaaSConfig {
     pub tcp_port: Option<u16>,
     pub read_timeout: Duration,
@@ -32,6 +33,18 @@ pub struct FaaSConfig {
 }
 
 impl FaaSConfig {
+    pub fn new() -> Self {
+        Self {
+            tcp_port: None,
+            read_timeout: Duration::from_secs(0),
+            write_timeout: Duration::from_secs(0),
+            enable_health: false,
+            enable_basic_auth: false,
+            secret_mount_path: String::from("/var/openfaas/secrets"),
+            max_idle_conns: 0,
+            max_idle_conns_per_host: 0,
+        }
+    }
     pub fn get_read_timeout(&self) -> Duration {
         if self.read_timeout <= Duration::from_secs(0) {
             DEFAULT_READ_TIMEOUT
