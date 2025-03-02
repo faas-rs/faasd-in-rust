@@ -6,6 +6,7 @@ pub mod proxy;
 pub mod auth;
 pub mod logs;
 pub mod metrics;
+pub mod consts;
 
 pub fn add(left: u64, right: u64) -> u64 {
     left + right

@@ -1574,6 +1574,11 @@ dependencies = [
 [[package]]
 name = "provider"
 version = "0.0.1"
+dependencies = [
+ "serde",
+ "serde_derive",
+ "serde_json",
+]
 
 [[package]]
 name = "quote"
