@@ -1,4 +1,4 @@
-
+pub mod deploy;
 
 use actix_web::{HttpResponse, Responder, HttpRequest};
 
@@ -58,4 +58,8 @@ pub async fn telemetry(_req: HttpRequest) -> impl Responder {
 
 pub async fn health(_req: HttpRequest) -> impl Responder {
     HttpResponse::Ok().body("健康检查")
+}
+
+pub trait Handler{
+    fn get_handler(&self,req: HttpRequest) -> impl Responder;
 }
