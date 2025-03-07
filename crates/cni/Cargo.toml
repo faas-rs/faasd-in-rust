@@ -1,0 +1,7 @@
+[package]
+name = "cni"
+edition = "2024"
+version.workspace = true
+authors.workspace = true
+
+[dependencies]
