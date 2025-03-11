@@ -1,9 +1,9 @@
+pub mod auth;
+pub mod bootstrap;
 pub mod config;
 pub mod handlers;
-pub mod types;
 pub mod httputils;
-pub mod proxy;
-pub mod auth;
 pub mod logs;
 pub mod metrics;
-pub mod bootstrap;
+pub mod proxy;
+pub mod types;

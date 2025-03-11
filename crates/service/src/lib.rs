@@ -5,8 +5,9 @@ use containerd_client::{
     Client,
     services::v1::{
         Container, CreateContainerRequest, CreateTaskRequest, DeleteContainerRequest,
-        DeleteTaskRequest, GetImageRequest, KillRequest, ListContainersRequest, ListTasksRequest,
-        ReadContentRequest, StartRequest, TransferOptions, TransferRequest, WaitRequest,
+        DeleteTaskRequest, GetImageRequest, KillRequest, ListContainersRequest,
+        ListNamespacesRequest, ListTasksRequest, ReadContentRequest, StartRequest, TransferOptions,
+        TransferRequest, WaitRequest,
         container::Runtime,
         snapshots::{MountsRequest, PrepareSnapshotRequest},
     },
@@ -22,12 +23,7 @@ use oci_spec::image::{Arch, ImageConfiguration, ImageIndex, ImageManifest, Media
 use prost_types::Any;
 use sha2::{Digest, Sha256};
 use spec::{DEFAULT_NAMESPACE, generate_spec};
-use std::{
-    fs,
-    sync::{Arc, Mutex},
-    time::Duration,
-    vec,
-};
+use std::{fs, sync::Arc, time::Duration, vec};
 use tokio::time::timeout;
 
 // config.json,dockerhub密钥
@@ -36,14 +32,14 @@ use tokio::time::timeout;
 type Err = Box<dyn std::error::Error>;
 
 pub struct Service {
-    client: Arc<Mutex<Client>>,
+    client: Arc<Client>,
 }
 
 impl Service {
     pub async fn new(endpoint: String) -> Result<Self, Err> {
         let client = Client::from_path(endpoint).await.unwrap();
         Ok(Service {
-            client: Arc::new(Mutex::new(client)),
+            client: Arc::new(client),
         })
     }
 
@@ -57,8 +53,6 @@ impl Service {
         };
         let resp = self
             .client
-            .lock()
-            .unwrap()
             .snapshots()
             .prepare(with_namespace!(req, ns))
             .await?
@@ -84,7 +78,7 @@ impl Service {
             value: spec.into_bytes(),
         };
 
-        let mut containers_client = self.client.lock().unwrap().containers();
+        let mut containers_client = self.client.containers();
         let container = Container {
             id: cid.to_string(),
             image: image_name.to_string(),
@@ -117,11 +111,10 @@ impl Service {
         let namespace = self.check_namespace(ns);
         let namespace = namespace.as_str();
 
-        let c = self.client.lock().unwrap();
         let request = ListContainersRequest {
             ..Default::default()
         };
-        let mut cc = c.containers();
+        let mut cc = self.client.containers();
 
         let responce = cc
             .list(with_namespace!(request, namespace))
@@ -133,7 +126,7 @@ impl Service {
             .find(|container| container.id == cid);
 
         if let Some(container) = container {
-            let mut tc = c.tasks();
+            let mut tc = self.client.tasks();
 
             let request = ListTasksRequest {
                 filter: format!("container=={}", cid),
@@ -199,8 +192,7 @@ impl Service {
     }
 
     async fn create_task(&self, cid: &str, ns: &str) -> Result<(), Err> {
-        let c = self.client.lock().unwrap();
-        let mut sc = c.snapshots();
+        let mut sc = self.client.snapshots();
         let req = MountsRequest {
             snapshotter: "overlayfs".to_string(),
             key: cid.to_string(),
@@ -211,7 +203,7 @@ impl Service {
             .into_inner()
             .mounts;
         drop(sc);
-        let mut tc = c.tasks();
+        let mut tc = self.client.tasks();
         let req = CreateTaskRequest {
             container_id: cid.to_string(),
             rootfs: mounts,
@@ -227,13 +219,7 @@ impl Service {
             container_id: cid.to_string(),
             ..Default::default()
         };
-        let _resp = self
-            .client
-            .lock()
-            .unwrap()
-            .tasks()
-            .start(with_namespace!(req, ns))
-            .await?;
+        let _resp = self.client.tasks().start(with_namespace!(req, ns)).await?;
 
         Ok(())
     }
@@ -242,7 +228,7 @@ impl Service {
         let namespace = self.check_namespace(ns);
         let namespace = namespace.as_str();
 
-        let mut c = self.client.lock().unwrap().tasks();
+        let mut c = self.client.tasks();
         let kill_request = KillRequest {
             container_id: cid.to_string(),
             signal: 15,
@@ -265,7 +251,7 @@ impl Service {
         let namespace = self.check_namespace(ns);
         let namespace = namespace.as_str();
 
-        let mut c = self.client.lock().unwrap().tasks();
+        let mut c = self.client.tasks();
         let time_out = Duration::from_secs(30);
         let wait_result = timeout(time_out, async {
             let wait_request = WaitRequest {
@@ -318,7 +304,7 @@ impl Service {
         let namespace = self.check_namespace(ns);
         let namespace = namespace.as_str();
 
-        let mut c = self.client.lock().unwrap().containers();
+        let mut c = self.client.containers();
 
         let request = ListContainersRequest {
             ..Default::default()
@@ -351,7 +337,7 @@ impl Service {
         } else {
             let namespace = self.check_namespace(ns);
             let namespace = namespace.as_str();
-            let mut c = self.client.lock().unwrap().images();
+            let mut c = self.client.images();
             let req = GetImageRequest {
                 name: image_name.to_string(),
             };
@@ -379,7 +365,7 @@ impl Service {
         let namespace = self.check_namespace(ns);
         let namespace = namespace.as_str();
 
-        let mut c = self.client.lock().unwrap().transfer();
+        let mut c = self.client.transfer();
         let source = OciRegistry {
             reference: image_name.to_string(),
             resolver: Default::default(),
@@ -451,7 +437,7 @@ impl Service {
             size: 0,
         };
 
-        let mut c = self.client.lock().unwrap().content();
+        let mut c = self.client.content();
         let resp = c
             .read(with_namespace!(req, ns))
             .await
@@ -475,7 +461,7 @@ impl Service {
             offset: 0,
             size: 0,
         };
-        let mut c = self.client.lock().unwrap().content();
+        let mut c = self.client.content();
 
         let resp = c
             .read(with_namespace!(req, ns))
@@ -492,7 +478,7 @@ impl Service {
     }
 
     pub async fn get_img_config(&self, name: &str, ns: &str) -> Option<ImageConfiguration> {
-        let mut c = self.client.lock().unwrap().images();
+        let mut c = self.client.images();
 
         let req = GetImageRequest {
             name: name.to_string(),
@@ -518,7 +504,7 @@ impl Service {
             ..Default::default()
         };
 
-        let mut c = self.client.lock().unwrap().content();
+        let mut c = self.client.content();
 
         let resp = c
             .read(with_namespace!(req, ns))
@@ -598,6 +584,29 @@ impl Service {
             _ => ns.to_string(),
         }
     }
+
+    pub async fn list_namespaces(&self) -> Result<Vec<String>, Err> {
+        let mut c = self.client.namespaces();
+        let req = ListNamespacesRequest {
+            ..Default::default()
+        };
+        let resp = c.list(req).await?;
+        Ok(resp
+            .into_inner()
+            .namespaces
+            .into_iter()
+            .map(|ns| ns.name)
+            .collect())
+    }
+
+    // pub async fn get_task_list(&self, ns: &str) -> Result<Vec<String>, Err> {
+    //     let mut c = self.client.tasks();
+    //     let req = ListTasksRequest {
+    //         ..Default::default()
+    //     };
+    //     let req = c.list(with_namespace!(req, ns)).await?.into_inner().tasks;
+    //     Ok(())
+    // }
 }
 //容器是容器，要先启动，然后才能运行任务
 //要想删除一个正在运行的Task，必须先kill掉这个task，然后才能删除。
