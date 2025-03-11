@@ -1,8 +1,4 @@
-
-
-use actix_web::{HttpResponse, Responder, HttpRequest};
-
-
+use actix_web::{HttpRequest, HttpResponse, Responder};
 
 pub async fn function_lister(_req: HttpRequest) -> impl Responder {
     HttpResponse::Ok().body("函数列表")
