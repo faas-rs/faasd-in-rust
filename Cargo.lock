@@ -515,7 +515,10 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
 name = "cni"
-version = "0.0.1"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+]
 
 [[package]]
 name = "config"
@@ -2351,10 +2354,12 @@ dependencies = [
 name = "service"
 version = "0.1.0"
 dependencies = [
+ "cni",
  "containerd-client",
  "env_logger",
  "handlebars",
  "hex",
+ "lazy_static",
  "log",
  "my-workspace-hack",
  "oci-spec",

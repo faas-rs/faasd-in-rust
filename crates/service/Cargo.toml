@@ -16,4 +16,6 @@ oci-spec =  "0.6"
 sha2 = "0.10"
 hex = "0.4"
 my-workspace-hack = { version = "0.1", path = "../my-workspace-hack" }
-handlebars= "4.1.0"     
+cni = { version = "0.1", path = "../cni" }
+handlebars= "4.1.0"
+lazy_static = "1.4"

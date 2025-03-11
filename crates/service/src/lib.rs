@@ -23,8 +23,9 @@ use prost_types::Any;
 use sha2::{Digest, Sha256};
 use spec::{DEFAULT_NAMESPACE, generate_spec};
 use std::{
+    collections::HashMap,
     fs,
-    sync::{Arc, Mutex},
+    sync::{Arc, RwLock},
     time::Duration,
     vec,
 };
@@ -33,18 +34,40 @@ use tokio::time::timeout;
 // config.json,dockerhub密钥
 // const DOCKER_CONFIG_DIR: &str = "/var/lib/faasd/.docker/";
 
+type NetnsMap = Arc<RwLock<HashMap<String, (String, String)>>>;
+lazy_static::lazy_static! {
+    static ref GLOBAL_NETNS_MAP: NetnsMap = Arc::new(RwLock::new(HashMap::new()));
+}
+
 type Err = Box<dyn std::error::Error>;
 
 pub struct Service {
-    client: Arc<Mutex<Client>>,
+    client: Arc<Client>,
+    netns_map: NetnsMap,
 }
 
 impl Service {
     pub async fn new(endpoint: String) -> Result<Self, Err> {
         let client = Client::from_path(endpoint).await.unwrap();
         Ok(Service {
-            client: Arc::new(Mutex::new(client)),
+            client: Arc::new(client),
+            netns_map: GLOBAL_NETNS_MAP.clone(),
         })
+    }
+
+    pub async fn save_netns_ip(&self, cid: &str, netns: &str, ip: &str) {
+        let mut map = self.netns_map.write().unwrap();
+        map.insert(cid.to_string(), (netns.to_string(), ip.to_string()));
+    }
+
+    pub async fn get_netns_ip(&self, cid: &str) -> Option<(String, String)> {
+        let map = self.netns_map.read().unwrap();
+        map.get(cid).cloned()
+    }
+
+    pub async fn remove_netns_ip(&self, cid: &str) {
+        let mut map = self.netns_map.write().unwrap();
+        map.remove(cid);
     }
 
     async fn prepare_snapshot(&self, cid: &str, ns: &str) -> Result<Vec<Mount>, Err> {
@@ -57,8 +80,6 @@ impl Service {
         };
         let resp = self
             .client
-            .lock()
-            .unwrap()
             .snapshots()
             .prepare(with_namespace!(req, ns))
             .await?
@@ -75,8 +96,8 @@ impl Service {
         };
 
         let _mount = self.prepare_snapshot(cid, ns).await?;
-
-        let spec_path = generate_spec(&cid, ns).unwrap();
+        let (env, args) = self.get_env_and_args(image_name, ns).await?;
+        let spec_path = generate_spec(&cid, ns, args, env).unwrap();
         let spec = fs::read_to_string(spec_path).unwrap();
 
         let spec = Any {
@@ -84,7 +105,7 @@ impl Service {
             value: spec.into_bytes(),
         };
 
-        let mut containers_client = self.client.lock().unwrap().containers();
+        let mut containers_client = self.client.containers();
         let container = Container {
             id: cid.to_string(),
             image: image_name.to_string(),
@@ -102,10 +123,10 @@ impl Service {
             container: Some(container),
         };
 
-        let req = with_namespace!(req, namespace);
+        // let req = with_namespace!(req, namespace);
 
         let _resp = containers_client
-            .create(req)
+            .create(with_namespace!(req, namespace))
             .await
             .expect("Failed to create container");
 
@@ -117,11 +138,10 @@ impl Service {
         let namespace = self.check_namespace(ns);
         let namespace = namespace.as_str();
 
-        let c = self.client.lock().unwrap();
         let request = ListContainersRequest {
             ..Default::default()
         };
-        let mut cc = c.containers();
+        let mut cc = self.client.containers();
 
         let responce = cc
             .list(with_namespace!(request, namespace))
@@ -133,7 +153,7 @@ impl Service {
             .find(|container| container.id == cid);
 
         if let Some(container) = container {
-            let mut tc = c.tasks();
+            let mut tc = self.client.tasks();
 
             let request = ListTasksRequest {
                 filter: format!("container=={}", cid),
@@ -169,6 +189,7 @@ impl Service {
                 .delete(with_namespace!(delete_request, namespace))
                 .await
                 .expect("Failed to delete container");
+            self.remove_netns_ip(cid).await;
 
             // println!("Container: {:?} deleted", cc);
         } else {
@@ -198,9 +219,9 @@ impl Service {
         Ok(())
     }
 
-    async fn create_task(&self, cid: &str, ns: &str) -> Result<(), Err> {
-        let c = self.client.lock().unwrap();
-        let mut sc = c.snapshots();
+    /// 返回任务的pid
+    async fn create_task(&self, cid: &str, ns: &str) -> Result<u32, Err> {
+        let mut sc = self.client.snapshots();
         let req = MountsRequest {
             snapshotter: "overlayfs".to_string(),
             key: cid.to_string(),
@@ -211,15 +232,17 @@ impl Service {
             .into_inner()
             .mounts;
         drop(sc);
-        let mut tc = c.tasks();
+        let (ip, path) = cni::cni_network::create_cni_network(cid.to_string(), ns.to_string())?;
+        self.save_netns_ip(cid, &path, &ip).await;
+        let mut tc = self.client.tasks();
         let req = CreateTaskRequest {
             container_id: cid.to_string(),
             rootfs: mounts,
             ..Default::default()
         };
-        let _resp = tc.create(with_namespace!(req, ns)).await?;
-
-        Ok(())
+        let resp = tc.create(with_namespace!(req, ns)).await?;
+        let pid = resp.into_inner().pid;
+        Ok(pid)
     }
 
     async fn start_task(&self, cid: &str, ns: &str) -> Result<(), Err> {
@@ -227,13 +250,7 @@ impl Service {
             container_id: cid.to_string(),
             ..Default::default()
         };
-        let _resp = self
-            .client
-            .lock()
-            .unwrap()
-            .tasks()
-            .start(with_namespace!(req, ns))
-            .await?;
+        let _resp = self.client.tasks().start(with_namespace!(req, ns)).await?;
 
         Ok(())
     }
@@ -242,7 +259,7 @@ impl Service {
         let namespace = self.check_namespace(ns);
         let namespace = namespace.as_str();
 
-        let mut c = self.client.lock().unwrap().tasks();
+        let mut c = self.client.tasks();
         let kill_request = KillRequest {
             container_id: cid.to_string(),
             signal: 15,
@@ -265,7 +282,7 @@ impl Service {
         let namespace = self.check_namespace(ns);
         let namespace = namespace.as_str();
 
-        let mut c = self.client.lock().unwrap().tasks();
+        let mut c = self.client.tasks();
         let time_out = Duration::from_secs(30);
         let wait_result = timeout(time_out, async {
             let wait_request = WaitRequest {
@@ -318,7 +335,7 @@ impl Service {
         let namespace = self.check_namespace(ns);
         let namespace = namespace.as_str();
 
-        let mut c = self.client.lock().unwrap().containers();
+        let mut c = self.client.containers();
 
         let request = ListContainersRequest {
             ..Default::default()
@@ -351,7 +368,7 @@ impl Service {
         } else {
             let namespace = self.check_namespace(ns);
             let namespace = namespace.as_str();
-            let mut c = self.client.lock().unwrap().images();
+            let mut c = self.client.images();
             let req = GetImageRequest {
                 name: image_name.to_string(),
             };
@@ -379,7 +396,7 @@ impl Service {
         let namespace = self.check_namespace(ns);
         let namespace = namespace.as_str();
 
-        let mut c = self.client.lock().unwrap().transfer();
+        let mut c = self.client.transfer();
         let source = OciRegistry {
             reference: image_name.to_string(),
             resolver: Default::default(),
@@ -451,7 +468,7 @@ impl Service {
             size: 0,
         };
 
-        let mut c = self.client.lock().unwrap().content();
+        let mut c = self.client.content();
         let resp = c
             .read(with_namespace!(req, ns))
             .await
@@ -475,7 +492,7 @@ impl Service {
             offset: 0,
             size: 0,
         };
-        let mut c = self.client.lock().unwrap().content();
+        let mut c = self.client.content();
 
         let resp = c
             .read(with_namespace!(req, ns))
@@ -492,7 +509,7 @@ impl Service {
     }
 
     pub async fn get_img_config(&self, name: &str, ns: &str) -> Option<ImageConfiguration> {
-        let mut c = self.client.lock().unwrap().images();
+        let mut c = self.client.images();
 
         let req = GetImageRequest {
             name: name.to_string(),
@@ -518,7 +535,7 @@ impl Service {
             ..Default::default()
         };
 
-        let mut c = self.client.lock().unwrap().content();
+        let mut c = self.client.content();
 
         let resp = c
             .read(with_namespace!(req, ns))
@@ -590,6 +607,21 @@ impl Service {
             ret = format!("sha256:{digest}");
         }
         Ok(ret)
+    }
+
+    async fn get_env_and_args(
+        &self,
+        name: &str,
+        ns: &str,
+    ) -> Result<(Vec<String>, Vec<String>), Err> {
+        let img_config = self.get_img_config(name, ns).await.unwrap();
+        if let Some(config) = img_config.config() {
+            let env = config.env().as_ref().map_or_else(Vec::new, |v| v.clone());
+            let args = config.cmd().as_ref().map_or_else(Vec::new, |v| v.clone());
+            Ok((env, args))
+        } else {
+            Err("No config found".into())
+        }
     }
 
     fn check_namespace(&self, ns: &str) -> String {
