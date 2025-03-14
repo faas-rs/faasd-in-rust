@@ -1,4 +1,4 @@
-use super::IAmHandler;
+use crate::types::config::IAmHandler;
 use actix_web::{HttpResponse, Responder};
 use service::Service;
 use std::sync::Arc;

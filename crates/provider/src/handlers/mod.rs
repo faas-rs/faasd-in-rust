@@ -110,16 +110,4 @@ impl From<std::io::Error> for FaasError {
     }
 }
 
-pub trait IAmHandler {
-    type Input: DeserializeOwned + Send + 'static;
-    // type Output: Serialize + Send + 'static;
 
-    /// 获取Handler元数据（函数名、超时时间等）
-    // fn metadata(&self) -> HandlerMeta;
-
-    /// 执行核心逻辑
-    fn execute(
-        &self,
-        input: Self::Input,
-    ) -> impl std::future::Future<Output = impl Responder> + Send;
-}

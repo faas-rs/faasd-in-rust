@@ -1,10 +1,10 @@
 use actix_web::HttpResponse;
-
+use crate::types::config::IAmHandler;
 pub struct FunctionLister {
     service: std::sync::Arc<service::Service>,
 }
 
-impl super::IAmHandler for FunctionLister {
+impl IAmHandler for FunctionLister {
     type Input = String;
     // type Output = Vec<String>;
 
