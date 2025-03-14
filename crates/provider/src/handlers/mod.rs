@@ -1,6 +1,7 @@
 pub mod deploy;
 pub mod function_list;
 pub mod namespace_list;
+pub mod invoke_resolver;
 use lazy_static::lazy_static;
 use std::collections::HashMap;
 

@@ -1,0 +1,53 @@
+use url::Url;
+use actix_web::{Error,error::ErrorInternalServerError};
+use log;
+
+pub struct InvokeResolver{
+    client:service::Service
+}
+
+impl InvokeResolver{
+    pub async fn new(client:service::Service)->Self{
+        Self{
+            client:client
+        }
+    }
+
+    pub async fn resolve(&self,function_name:&str)->Result<Url,Error>{
+
+        //根据函数名和containerd获取函数ip，
+        //从函数名称中提取命名空间。如果函数名称中包含 .，则将其后的部分作为命名空间；否则使用默认命名空间
+
+        // let mut actual_function_name=function_name;
+        // let mut namespace=get_namespace_or_default(function_name, "faasd-in-rust");
+        // if function_name.contains('.'){
+        //     actual_function_name = function_name.trim_end_matches(&format!(".{}", namespace));
+        // }
+
+        // let function=get_function(&function_name, &namespace).await;
+        
+
+        let urlstr=format!("http://127.0.0.1:8080");
+        match Url::parse(&urlstr){
+            Ok(url)=>{
+                return Ok(url);
+            }
+            Err(e)=>{
+                log::error!("Failed to resolve url:{}",e);
+                return Err(ErrorInternalServerError("Failed to resolve URL"));
+            }
+        }
+    }
+   
+}
+
+
+fn get_namespace_or_default(function_name:&str,default_namespace:&str)->String{
+    let mut namespace=default_namespace.to_string();
+    if function_name.contains('.'){
+        if let Some(index)=function_name.rfind('.'){
+            namespace=function_name[index+1..].to_string();
+        }
+    }
+    return namespace;
+}
