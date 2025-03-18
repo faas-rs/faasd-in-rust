@@ -1,7 +1,7 @@
 use futures::StreamExt;
 use std::time::Duration;
 
-use actix_web::{Error, HttpRequest, HttpResponse, Responder, web};
+use actix_web::{Error, HttpRequest, HttpResponse, Responder, web,http::Method};
 use reqwest::{Client, RequestBuilder, redirect};
 use url::Url;
 
@@ -27,8 +27,8 @@ impl IAmHandler for Proxy {
 
         let proxy_client = new_proxy_client_from_config(config).await;
 
-        match req.method().as_str() {
-            "POST" | "PUT" | "DELETE" | "GET" | "PATCH" | "HEAD" | "OPTIONS" => {
+        match req.method() {
+            &Method::POST | &Method::PUT | &Method::DELETE | &Method::GET | &Method::PATCH | &Method::HEAD | &Method::OPTIONS => {
                 match proxy_request(&req, &mut payload, &proxy_client, &resolver).await {
                     Ok(resp) => {
                         return resp;

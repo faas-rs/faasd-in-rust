@@ -2,11 +2,11 @@ pub mod deploy;
 pub mod function_list;
 pub mod namespace_list;
 pub mod invoke_resolver;
-use lazy_static::lazy_static;
-use std::collections::HashMap;
+// use lazy_static::lazy_static;
+// use std::collections::HashMap;
 
 use actix_web::{HttpRequest, HttpResponse, Responder};
-use serde::{Serialize, de::DeserializeOwned};
+//use serde::{Serialize, de::DeserializeOwned};
 
 pub async fn function_lister(_req: HttpRequest) -> impl Responder {
     HttpResponse::Ok().body("函数列表")
