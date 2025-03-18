@@ -1,4 +1,4 @@
-use super::IAmHandler;
+use crate::types::config::IAmHandler;
 use crate::types::{self, CreateContainerInfo};
 use actix_web::HttpResponse;
 use service::Service;

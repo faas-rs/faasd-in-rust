@@ -1,4 +1,4 @@
-use actix_web::{App, HttpResponse, HttpServer, Responder, guard, middleware, web};
+use actix_web::{App, HttpServer, middleware, web};
 use prometheus::Registry;
 use std::collections::HashMap;
 
