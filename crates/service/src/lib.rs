@@ -5,8 +5,9 @@ use containerd_client::{
     Client,
     services::v1::{
         Container, CreateContainerRequest, CreateTaskRequest, DeleteContainerRequest,
-        DeleteTaskRequest, GetImageRequest, KillRequest, ListContainersRequest, ListTasksRequest,
-        ReadContentRequest, StartRequest, TransferOptions, TransferRequest, WaitRequest,
+        DeleteTaskRequest, GetImageRequest, KillRequest, ListContainersRequest,
+        ListNamespacesRequest, ListTasksRequest, ReadContentRequest, StartRequest, TransferOptions,
+        TransferRequest, WaitRequest,
         container::Runtime,
         snapshots::{MountsRequest, PrepareSnapshotRequest},
     },
@@ -630,6 +631,29 @@ impl Service {
             _ => ns.to_string(),
         }
     }
+
+    pub async fn list_namespaces(&self) -> Result<Vec<String>, Err> {
+        let mut c = self.client.namespaces();
+        let req = ListNamespacesRequest {
+            ..Default::default()
+        };
+        let resp = c.list(req).await?;
+        Ok(resp
+            .into_inner()
+            .namespaces
+            .into_iter()
+            .map(|ns| ns.name)
+            .collect())
+    }
+
+    // pub async fn get_task_list(&self, ns: &str) -> Result<Vec<String>, Err> {
+    //     let mut c = self.client.tasks();
+    //     let req = ListTasksRequest {
+    //         ..Default::default()
+    //     };
+    //     let req = c.list(with_namespace!(req, ns)).await?.into_inner().tasks;
+    //     Ok(())
+    // }
 }
 //容器是容器，要先启动，然后才能运行任务
 //要想删除一个正在运行的Task，必须先kill掉这个task，然后才能删除。

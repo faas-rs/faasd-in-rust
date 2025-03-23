@@ -171,7 +171,7 @@ fn default_unix_namespaces(ns: &str, cid: &str) -> Vec<LinuxNamespace> {
         },
         LinuxNamespace {
             type_: String::from(NETWORK_NAMESPACE),
-            path: Some(format!("/var/run/netns/{}",get_netns(ns, cid))),
+            path: Some(format!("/var/run/netns/{}", get_netns(ns, cid))),
         },
     ]
 }
