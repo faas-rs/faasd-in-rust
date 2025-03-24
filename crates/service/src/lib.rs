@@ -23,16 +23,28 @@ use oci_spec::image::{Arch, ImageConfiguration, ImageIndex, ImageManifest, Media
 use prost_types::Any;
 use sha2::{Digest, Sha256};
 use spec::{DEFAULT_NAMESPACE, generate_spec};
-use std::{fs, sync::Arc, time::Duration, vec};
+use std::{
+    collections::HashMap,
+    fs,
+    sync::{Arc, RwLock},
+    time::Duration,
+    vec,
+};
 use tokio::time::timeout;
 
 // config.json,dockerhub密钥
 // const DOCKER_CONFIG_DIR: &str = "/var/lib/faasd/.docker/";
 
+type NetnsMap = Arc<RwLock<HashMap<String, (String, String)>>>;
+lazy_static::lazy_static! {
+    static ref GLOBAL_NETNS_MAP: NetnsMap = Arc::new(RwLock::new(HashMap::new()));
+}
+
 type Err = Box<dyn std::error::Error>;
 
 pub struct Service {
     client: Arc<Client>,
+    netns_map: NetnsMap,
 }
 
 impl Service {
@@ -40,7 +52,23 @@ impl Service {
         let client = Client::from_path(endpoint).await.unwrap();
         Ok(Service {
             client: Arc::new(client),
+            netns_map: GLOBAL_NETNS_MAP.clone(),
         })
+    }
+
+    pub async fn save_netns_ip(&self, cid: &str, netns: &str, ip: &str) {
+        let mut map = self.netns_map.write().unwrap();
+        map.insert(cid.to_string(), (netns.to_string(), ip.to_string()));
+    }
+
+    pub async fn get_netns_ip(&self, cid: &str) -> Option<(String, String)> {
+        let map = self.netns_map.read().unwrap();
+        map.get(cid).cloned()
+    }
+
+    pub async fn remove_netns_ip(&self, cid: &str) {
+        let mut map = self.netns_map.write().unwrap();
+        map.remove(cid);
     }
 
     async fn prepare_snapshot(&self, cid: &str, ns: &str) -> Result<Vec<Mount>, Err> {
@@ -69,8 +97,8 @@ impl Service {
         };
 
         let _mount = self.prepare_snapshot(cid, ns).await?;
-
-        let spec_path = generate_spec(&cid, ns).unwrap();
+        let (env, args) = self.get_env_and_args(image_name, ns).await?;
+        let spec_path = generate_spec(&cid, ns, args, env).unwrap();
         let spec = fs::read_to_string(spec_path).unwrap();
 
         let spec = Any {
@@ -96,10 +124,10 @@ impl Service {
             container: Some(container),
         };
 
-        let req = with_namespace!(req, namespace);
+        // let req = with_namespace!(req, namespace);
 
         let _resp = containers_client
-            .create(req)
+            .create(with_namespace!(req, namespace))
             .await
             .expect("Failed to create container");
 
@@ -162,6 +190,7 @@ impl Service {
                 .delete(with_namespace!(delete_request, namespace))
                 .await
                 .expect("Failed to delete container");
+            self.remove_netns_ip(cid).await;
 
             // println!("Container: {:?} deleted", cc);
         } else {
@@ -191,7 +220,8 @@ impl Service {
         Ok(())
     }
 
-    async fn create_task(&self, cid: &str, ns: &str) -> Result<(), Err> {
+    /// 返回任务的pid
+    async fn create_task(&self, cid: &str, ns: &str) -> Result<u32, Err> {
         let mut sc = self.client.snapshots();
         let req = MountsRequest {
             snapshotter: "overlayfs".to_string(),
@@ -203,15 +233,17 @@ impl Service {
             .into_inner()
             .mounts;
         drop(sc);
+        let (ip, path) = cni::cni_network::create_cni_network(cid.to_string(), ns.to_string())?;
+        self.save_netns_ip(cid, &path, &ip).await;
         let mut tc = self.client.tasks();
         let req = CreateTaskRequest {
             container_id: cid.to_string(),
             rootfs: mounts,
             ..Default::default()
         };
-        let _resp = tc.create(with_namespace!(req, ns)).await?;
-
-        Ok(())
+        let resp = tc.create(with_namespace!(req, ns)).await?;
+        let pid = resp.into_inner().pid;
+        Ok(pid)
     }
 
     async fn start_task(&self, cid: &str, ns: &str) -> Result<(), Err> {
@@ -576,6 +608,21 @@ impl Service {
             ret = format!("sha256:{digest}");
         }
         Ok(ret)
+    }
+
+    async fn get_env_and_args(
+        &self,
+        name: &str,
+        ns: &str,
+    ) -> Result<(Vec<String>, Vec<String>), Err> {
+        let img_config = self.get_img_config(name, ns).await.unwrap();
+        if let Some(config) = img_config.config() {
+            let env = config.env().as_ref().map_or_else(Vec::new, |v| v.clone());
+            let args = config.cmd().as_ref().map_or_else(Vec::new, |v| v.clone());
+            Ok((env, args))
+        } else {
+            Err("No config found".into())
+        }
     }
 
     fn check_namespace(&self, ns: &str) -> String {

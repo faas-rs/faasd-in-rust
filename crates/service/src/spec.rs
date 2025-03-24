@@ -103,6 +103,7 @@ pub struct LinuxDeviceCgroup {
 pub struct LinuxNamespace {
     #[serde(rename = "type")]
     pub type_: String,
+    pub path: Option<String>,
 }
 
 pub fn default_unix_caps() -> Vec<String> {
@@ -150,22 +151,27 @@ fn default_readonly_paths() -> Vec<String> {
     ]
 }
 
-fn default_unix_namespaces() -> Vec<LinuxNamespace> {
+fn default_unix_namespaces(ns: &str, cid: &str) -> Vec<LinuxNamespace> {
     vec![
         LinuxNamespace {
             type_: String::from(PID_NAMESPACE),
+            path: None,
         },
         LinuxNamespace {
             type_: String::from(IPC_NAMESPACE),
+            path: None,
         },
         LinuxNamespace {
             type_: String::from(UTS_NAMESPACE),
+            path: None,
         },
         LinuxNamespace {
             type_: String::from(MOUNT_NAMESPACE),
+            path: None,
         },
         LinuxNamespace {
             type_: String::from(NETWORK_NAMESPACE),
+            path: Some(format!("/var/run/netns/{}", get_netns(ns, cid))),
         },
     ]
 }
@@ -294,7 +300,7 @@ pub fn populate_default_unix_spec(id: &str, ns: &str) -> Spec {
                     access: RWM.to_string(),
                 }],
             },
-            namespaces: default_unix_namespaces(),
+            namespaces: default_unix_namespaces(ns, id),
         },
         mounts: default_mounts(),
     }
@@ -306,12 +312,23 @@ pub fn save_spec_to_file(spec: &Spec, path: &str) -> Result<(), std::io::Error> 
     Ok(())
 }
 
-pub fn generate_spec(id: &str, ns: &str) -> Result<String, std::io::Error> {
+fn get_netns(ns: &str, cid: &str) -> String {
+    format!("{}-{}", ns, cid)
+}
+
+pub fn generate_spec(
+    id: &str,
+    ns: &str,
+    args: Vec<String>,
+    env: Vec<String>,
+) -> Result<String, std::io::Error> {
     let namespace = match ns {
         "" => DEFAULT_NAMESPACE,
         _ => ns,
     };
-    let spec = populate_default_unix_spec(id, ns);
+    let mut spec = populate_default_unix_spec(id, ns);
+    spec.process.args = args;
+    spec.process.env = env;
     let path = format!("{}/{}/{}.json", PATH_TO_SPEC_PREFIX, namespace, id);
     save_spec_to_file(&spec, &path)?;
     Ok(path)
