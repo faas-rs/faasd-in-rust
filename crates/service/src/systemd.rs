@@ -58,7 +58,7 @@ impl Systemd {
     }
 
     pub fn install_unit(name: String, tokens: HashMap<String, String>) -> Result<(), Err> {
-        if tokens.get("Cwd").map_or(true, |v| v.is_empty()) {
+        if tokens.get("Cwd").is_none_or(|v| v.is_empty()) {
             return Err("key Cwd expected in tokens parameter".into());
         }
 

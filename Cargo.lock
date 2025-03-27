@@ -517,6 +517,7 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 name = "cni"
 version = "0.1.0"
 dependencies = [
+ "my-workspace-hack",
  "serde_json",
 ]
 
@@ -1620,6 +1621,9 @@ dependencies = [
  "actix-router",
  "bitflags 2.8.0",
  "bytes",
+ "futures-channel",
+ "futures-task",
+ "futures-util",
  "getrandom 0.2.15",
  "libc",
  "log",
@@ -1630,7 +1634,11 @@ dependencies = [
  "regex-automata",
  "regex-syntax",
  "serde 1.0.217",
+ "smallvec",
  "syn 2.0.96",
+ "tokio",
+ "tokio-util",
+ "tower 0.4.13",
  "tracing",
  "tracing-core",
 ]
@@ -2033,6 +2041,7 @@ dependencies = [
  "futures-util",
  "hyper 0.14.32",
  "lazy_static",
+ "my-workspace-hack",
  "prometheus",
  "regex",
  "reqwest",

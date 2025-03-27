@@ -17,8 +17,7 @@ impl IAmHandler for DeployHandler {
         let cid = input.container_id.clone();
         let image = input.image.clone();
         let ns = input.ns.clone();
-        let _ = self
-            .service
+        self.service
             .create_container(&image, &cid, &ns)
             .await
             .unwrap();

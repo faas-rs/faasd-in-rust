@@ -104,14 +104,12 @@ pub fn create_cni_network(cid: String, ns: String) -> Result<(String, String), E
             };
             if let Some(ips) = json.get("ips").and_then(|ips| ips.as_array()) {
                 if let Some(first_ip) = ips
-                    .get(0)
+                    .first()
                     .and_then(|ip| ip.get("address"))
                     .and_then(|addr| addr.as_str())
                 {
                     ip = first_ip.to_string();
-                } else {
                 }
-            } else {
             }
         }
         Err(e) => {
@@ -142,14 +140,11 @@ pub fn delete_cni_network(ns: &str, cid: &str) {
 }
 
 fn dir_exists(dirname: &Path) -> bool {
-    path_exists(dirname).map_or(false, |info| info.is_dir())
+    path_exists(dirname).is_some_and(|info| info.is_dir())
 }
 
 fn path_exists(path: &Path) -> Option<fs::Metadata> {
-    match fs::metadata(path) {
-        Ok(metadata) => Some(metadata),
-        Err(_) => None,
-    }
+    fs::metadata(path).ok()
 }
 
 #[allow(unused)]

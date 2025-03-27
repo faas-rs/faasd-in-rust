@@ -11,6 +11,12 @@ pub struct HttpMetrics {
     pub requests_total: prometheus::IntCounterVec,
 }
 
+impl Default for HttpMetrics {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl HttpMetrics {
     pub fn new() -> Self {
         Self {

@@ -1,10 +1,5 @@
-use actix_web::dev::{Service, Transform};
-use actix_web::http::header::HeaderValue;
-use actix_web::{Error, HttpMessage, HttpResponse, dev::ServiceRequest, dev::ServiceResponse};
-use futures_util::future::{LocalBoxFuture, Ready, ok};
+use actix_web::{Error, HttpMessage, HttpResponse, dev::ServiceRequest};
 use std::collections::HashMap;
-use std::rc::Rc;
-use std::task::{Context, Poll};
 
 //写到使用actix-web-httpauth作为中间件，还没有解决read_basic_auth函数的实现，返回值和之前在bootstrap的调用不一样
 

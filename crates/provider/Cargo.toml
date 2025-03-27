@@ -27,3 +27,4 @@ futures-util = "0.3"
 service = { path = "../service" } 
 async-trait = "0.1"
 lazy_static = "1.4.0"
+my-workspace-hack = { version = "0.1", path = "../my-workspace-hack" }

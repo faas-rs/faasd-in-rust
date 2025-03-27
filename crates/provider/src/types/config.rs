@@ -32,6 +32,12 @@ pub struct FaaSConfig {
     pub max_idle_conns_per_host: usize,
 }
 
+impl Default for FaaSConfig {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FaaSConfig {
     pub fn new() -> Self {
         Self {

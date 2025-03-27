@@ -17,14 +17,21 @@ publish = false
 [dependencies]
 actix-router = { version = "0.5", default-features = false, features = ["http", "unicode"] }
 bytes = { version = "1" }
+futures-channel = { version = "0.3", features = ["sink"] }
+futures-task = { version = "0.3", default-features = false, features = ["std"] }
+futures-util = { version = "0.3", features = ["channel", "io", "sink"] }
 log = { version = "0.4", default-features = false, features = ["std"] }
-memchr = { version = "2" }
+memchr = { version = "2", features = ["use_std"] }
 mio = { version = "1", features = ["net", "os-ext"] }
 prost = { version = "0.13", features = ["prost-derive"] }
 regex = { version = "1" }
 regex-automata = { version = "0.4", default-features = false, features = ["dfa-onepass", "hybrid", "meta", "nfa-backtrack", "perf-inline", "perf-literal", "unicode"] }
 regex-syntax = { version = "0.8" }
 serde = { version = "1", features = ["derive"] }
+smallvec = { version = "1", default-features = false, features = ["const_new"] }
+tokio = { version = "1", features = ["full"] }
+tokio-util = { version = "0.7", features = ["codec", "io"] }
+tower = { version = "0.4", features = ["balance", "buffer", "limit", "util"] }
 tracing = { version = "0.1", features = ["log"] }
 tracing-core = { version = "0.1", default-features = false, features = ["std"] }
 
@@ -32,7 +39,7 @@ tracing-core = { version = "0.1", default-features = false, features = ["std"] }
 actix-router = { version = "0.5", default-features = false, features = ["http", "unicode"] }
 bytes = { version = "1" }
 log = { version = "0.4", default-features = false, features = ["std"] }
-memchr = { version = "2" }
+memchr = { version = "2", features = ["use_std"] }
 prost = { version = "0.13", features = ["prost-derive"] }
 regex = { version = "1" }
 regex-automata = { version = "0.4", default-features = false, features = ["dfa-onepass", "hybrid", "meta", "nfa-backtrack", "perf-inline", "perf-literal", "unicode"] }

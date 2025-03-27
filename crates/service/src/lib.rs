@@ -98,7 +98,7 @@ impl Service {
 
         let _mount = self.prepare_snapshot(cid, ns).await?;
         let (env, args) = self.get_env_and_args(image_name, ns).await?;
-        let spec_path = generate_spec(&cid, ns, args, env).unwrap();
+        let spec_path = generate_spec(cid, ns, args, env).unwrap();
         let spec = fs::read_to_string(spec_path).unwrap();
 
         let spec = Any {
@@ -430,10 +430,12 @@ impl Service {
         };
         c.transfer(with_namespace!(req, namespace))
             .await
-            .expect(&format!(
-                "Unable to transfer image {} to namespace {}",
-                image_name, namespace
-            ));
+            .unwrap_or_else(|_| {
+                panic!(
+                    "Unable to transfer image {} to namespace {}",
+                    image_name, namespace
+                )
+            });
         Ok(())
     }
 
@@ -443,7 +445,7 @@ impl Service {
     }
 
     async fn handle_index(&self, data: &Vec<u8>, ns: &str) -> Option<ImageConfiguration> {
-        let image_index: ImageIndex = ::serde_json::from_slice(&data).unwrap();
+        let image_index: ImageIndex = ::serde_json::from_slice(data).unwrap();
         let img_manifest_dscr = image_index
             .manifests()
             .iter()
@@ -485,7 +487,7 @@ impl Service {
     }
 
     async fn handle_manifest(&self, data: &Vec<u8>, ns: &str) -> Option<ImageConfiguration> {
-        let img_manifest: ImageManifest = ::serde_json::from_slice(&data).unwrap();
+        let img_manifest: ImageManifest = ::serde_json::from_slice(data).unwrap();
         let img_manifest_dscr = img_manifest.config();
 
         let req = ReadContentRequest {
@@ -598,7 +600,7 @@ impl Service {
             .next()
             .map_or_else(String::new, |layer_digest| layer_digest.clone());
 
-        while let Some(layer_digest) = iter.next() {
+        for layer_digest in iter {
             let mut hasher = Sha256::new();
             hasher.update(ret.as_bytes());
             ret.push_str(&format!(",{}", layer_digest));
