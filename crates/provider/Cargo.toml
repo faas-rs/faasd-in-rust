@@ -24,7 +24,8 @@ futures = "0.3"
 actix-service = "2"
 base64 = "0.13"
 futures-util = "0.3"
-service = { path = "../service" } 
+service = { path = "../service" }
+cni = { path = "../cni" }
 async-trait = "0.1"
 lazy_static = "1.4.0"
 log = "0.4"

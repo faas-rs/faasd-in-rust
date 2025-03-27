@@ -1,4 +1,5 @@
 pub mod deploy;
+pub mod function_get;
 pub mod function_list;
 pub mod namespace_list;
 

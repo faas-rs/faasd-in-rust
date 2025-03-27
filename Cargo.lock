@@ -2036,6 +2036,7 @@ dependencies = [
  "async-trait",
  "base64 0.13.1",
  "bollard",
+ "cni",
  "config",
  "futures",
  "futures-util",
