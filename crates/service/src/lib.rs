@@ -2,22 +2,11 @@ pub mod spec;
 pub mod systemd;
 
 use containerd_client::{
-    Client,
     services::v1::{
-        Container, CreateContainerRequest, CreateTaskRequest, DeleteContainerRequest,
-        DeleteTaskRequest, GetImageRequest, KillRequest, ListContainersRequest,
-        ListNamespacesRequest, ListTasksRequest, ReadContentRequest, StartRequest, TransferOptions,
-        TransferRequest, WaitRequest,
-        container::Runtime,
-        snapshots::{MountsRequest, PrepareSnapshotRequest},
-    },
-    to_any,
-    tonic::Request,
-    types::{
-        Mount, Platform,
-        transfer::{ImageStore, OciRegistry, UnpackConfiguration},
-    },
-    with_namespace,
+        container::Runtime, snapshots::{MountsRequest, PrepareSnapshotRequest}, Container, CreateContainerRequest, CreateTaskRequest, DeleteContainerRequest, DeleteTaskRequest, GetImageRequest, KillRequest, ListContainersRequest, ListNamespacesRequest, ListTasksRequest, ReadContentRequest, StartRequest, TransferOptions, TransferRequest, WaitRequest
+    }, to_any, tonic::Request, types::{
+        transfer::{ImageStore, OciRegistry, UnpackConfiguration}, v1::Process, Mount, Platform
+    }, with_namespace, Client
 };
 use oci_spec::image::{Arch, ImageConfiguration, ImageIndex, ImageManifest, MediaType, Os};
 use prost_types::Any;
@@ -62,7 +51,8 @@ impl Service {
     }
 
     pub async fn get_netns_ip(&self, cid: &str) -> Option<(String, String)> {
-        let map = self.netns_map.read().unwrap();
+        let map: std::sync::RwLockReadGuard<'_, HashMap<String, (String, String)>> =
+            self.netns_map.read().unwrap();
         map.get(cid).cloned()
     }
 
@@ -332,6 +322,24 @@ impl Service {
         }
     }
 
+    pub async fn load_container(&self, cid: &str, ns: &str) -> Result<Container, Err> {
+        let namespace = self.check_namespace(ns);
+        let mut c = self.client.containers();
+        let request = ListContainersRequest {
+            ..Default::default()
+        };
+        let response = c
+            .list(with_namespace!(request, namespace))
+            .await?
+            .into_inner();
+        let container = response
+            .containers
+            .into_iter()
+            .find(|container| container.id == cid)
+            .ok_or_else(|| -> Err { format!("Container {} not found", cid).into() })?;
+        Ok(container)
+    }
+
     pub async fn get_container_list(&self, ns: &str) -> Result<Vec<String>, tonic::Status> {
         let namespace = self.check_namespace(ns);
         let namespace = namespace.as_str();
@@ -352,6 +360,26 @@ impl Service {
             .into_iter()
             .map(|container| container.id)
             .collect())
+    }
+
+    pub async fn get_task(&self, cid: &str, ns: &str) -> Result<Process, Err> {
+        let namespace = self.check_namespace(ns);
+        let mut tc = self.client.tasks();
+
+        let request = ListTasksRequest {
+            filter: format!("container=={}", cid),
+            ..Default::default()
+        };
+
+        let response = tc.list(with_namespace!(request, namespace)).await?;
+        let tasks = response.into_inner().tasks;
+
+        let task = tasks
+            .into_iter()
+            .find(|task| task.container_id == cid)
+            .ok_or_else(|| -> Err { format!("Task for container {} not found", cid).into() })?;
+
+        Ok(task)
     }
 
     pub async fn get_task_list() {
@@ -612,7 +640,7 @@ impl Service {
         Ok(ret)
     }
 
-    async fn get_env_and_args(
+    pub async fn get_env_and_args(
         &self,
         name: &str,
         ns: &str,

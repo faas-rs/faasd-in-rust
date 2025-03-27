@@ -1,3 +1,5 @@
+use std::{collections::HashMap, time::SystemTime};
+
 use actix_web::HttpResponse;
 
 pub struct FunctionLister {
@@ -21,5 +23,49 @@ impl super::IAmHandler for FunctionLister {
         for container in containers.iter() {}
 
         HttpResponse::Ok().json("函数列表")
+    }
+}
+
+pub struct Function {
+    pub name: String,
+    pub namespace: String,
+    pub image: String,
+    pub pid: u32,
+    pub replicas: i32,
+    pub ip: String,
+    pub labels: HashMap<String, String>,
+    // pub annotations: HashMap<String, String>,
+    // pub secrets: Vec<String>,
+    pub env_vars: HashMap<String, String>,
+    pub env_process: String,
+    // pub memory_limit: i64,
+    pub created_at: SystemTime,
+}
+
+impl Function {
+    pub fn new(
+        name: String,
+        namespace: String,
+        image: String,
+        pid: u32,
+        replicas: i32,
+        ip: String,
+        labels: HashMap<String, String>,
+        env_vars: HashMap<String, String>,
+        env_process: String,
+        created_at: SystemTime,
+    ) -> Self {
+        Function {
+            name,
+            namespace,
+            image,
+            pid,
+            replicas,
+            ip,
+            labels,
+            env_vars,
+            env_process,
+            created_at,
+        }
     }
 }
