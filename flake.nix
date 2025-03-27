@@ -5,13 +5,14 @@
     nixpkgs.url      = "github:NixOS/nixpkgs/nixos-unstable";
     crane.url = "github:ipetkov/crane";
     flake-utils.url  = "github:numtide/flake-utils";
+    nix-github-actions.url = "github:nix-community/nix-github-actions";
     rust-overlay = {
       url = "github:oxalica/rust-overlay";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
 
-  outputs = { self, nixpkgs, crane, flake-utils, rust-overlay, ... }:
+  outputs = { self, nixpkgs, crane, flake-utils, rust-overlay, nix-github-actions, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
       # reference: https://crane.dev/examples/quick-start-workspace.html
@@ -32,12 +33,15 @@
           strictDeps = true;
           # Add additional build inputs here
           buildInputs = with pkgs; [
+            openssl
+            protobuf
             pkg-config
           ];
 
           nativeBuildInputs = with pkgs; [
             openssl
             protobuf
+            pkg-config
           ];
         };
         cargoArtifacts = craneLib.buildDepsOnly commonArgs;
@@ -55,6 +59,8 @@
             ./Cargo.lock
             (craneLib.fileset.commonCargoSources ./crates/app)
             (craneLib.fileset.commonCargoSources ./crates/service)
+            (craneLib.fileset.commonCargoSources ./crates/provider)
+            (craneLib.fileset.commonCargoSources ./crates/cni)
             (craneLib.fileset.commonCargoSources ./crates/my-workspace-hack)
             (craneLib.fileset.commonCargoSources crate)
           ];
@@ -140,5 +146,13 @@
           ];
         };
       }
-    );
+    )
+    // {
+      githubActions = nix-github-actions.lib.mkGithubMatrix {
+        checks.x86_64-linux = self.checks.x86_64-linux;
+        checks.x86_64-darwin.faas-rs-crate = self.checks.x86_64-darwin.faas-rs-crate;
+        checks.aarch64-linux.faas-rs-crate = self.checks.aarch64-linux.faas-rs-crate;
+        checks.aarch64-darwin.faas-rs-crate = self.checks.aarch64-darwin.faas-rs-crate;
+      };
+    };
 }
