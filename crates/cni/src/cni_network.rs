@@ -67,11 +67,19 @@ fn get_netns(ns: &str, cid: &str) -> String {
 fn get_path(netns: &str) -> String {
     format!("/var/run/netns/{}", netns)
 }
+pub struct CNINetwork {
+    cid: String,
+    ns: String
+}
 
+impl CNINetwork{
+    fn new (cid: String,ns:String) -> CNINetwork{
+        return CNINetwork { cid: cid, ns: ns }
+    }
 //TODO: 创建网络和删除网络的错误处理
-pub fn create_cni_network(cid: String, ns: String) -> Result<(String, String), Err> {
+pub fn create_cni_network(&self) -> Result<(String, String), Err> {
     // let netid = format!("{}-{}", cid, pid);
-    let netns = get_netns(ns.as_str(), cid.as_str());
+    let netns = get_netns(self.ns.as_str(), self.cid.as_str());
     let path = get_path(netns.as_str());
     let mut ip = String::new();
 
@@ -119,6 +127,12 @@ pub fn create_cni_network(cid: String, ns: String) -> Result<(String, String), E
 
     Ok((ip, path))
 }
+}
+impl Drop for CNINetwork {
+    fn drop(&mut self) {
+        delete_cni_network(&self.ns, &self.cid);
+    }
+}
 
 pub fn delete_cni_network(ns: &str, cid: &str) {
     let netns = get_netns(ns, cid);
@@ -138,6 +152,7 @@ pub fn delete_cni_network(ns: &str, cid: &str) {
         .arg(&netns)
         .output();
 }
+
 
 fn dir_exists(dirname: &Path) -> bool {
     path_exists(dirname).is_some_and(|info| info.is_dir())
