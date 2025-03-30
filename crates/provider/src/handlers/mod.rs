@@ -1,10 +1,10 @@
 pub mod deploy;
 pub mod function_get;
 pub mod function_list;
+pub mod invoke_resolver;
 pub mod namespace_list;
 
 use actix_web::{HttpRequest, HttpResponse, Responder};
-
 
 pub async fn function_lister(_req: HttpRequest) -> impl Responder {
     HttpResponse::Ok().body("函数列表")
@@ -108,4 +108,3 @@ impl From<std::io::Error> for FaasError {
         }
     }
 }
-

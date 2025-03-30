@@ -1,6 +1,6 @@
-use std::{collections::HashMap, time::SystemTime};
 use crate::types::config::IAmHandler;
 use actix_web::HttpResponse;
+use std::{collections::HashMap, time::SystemTime};
 
 pub struct FunctionLister {
     service: std::sync::Arc<service::Service>,
