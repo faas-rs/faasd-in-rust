@@ -1,23 +1,21 @@
 use std::time::Duration;
+use actix_web::Responder;
 
 const DEFAULT_READ_TIMEOUT: Duration = Duration::from_secs(10);
 const DEFAULT_MAX_IDLE_CONNS: usize = 1024;
 
-pub struct FaasHandler<S> {
-    pub list_namespaces: S,
-    pub mutate_namespace: S,
-    pub function_proxy: S,
-    pub function_lister: S,
-    pub deploy_function: S,
-    pub update_function: S,
-    pub delete_function: S,
-    pub function_status: S,
-    pub scale_function: S,
-    pub secrets: S,
-    pub logs: S,
-    pub health: Option<S>,
-    pub info: S,
-    pub telemetry: S,
+pub trait IAmHandler {
+    type Input/*: DeserializeOwned + Send + 'static*/;
+    // type Output: Serialize + Send + 'static;
+
+    // /// 获取Handler元数据（函数名、超时时间等）
+    // fn metadata(&self) -> HandlerMeta;
+
+    /// 执行核心逻辑
+    fn execute(
+        &mut self,
+        input: Self::Input,
+    ) -> impl std::future::Future<Output = impl Responder> /*+ Send*/;
 }
 
 #[derive(Debug, Clone)]

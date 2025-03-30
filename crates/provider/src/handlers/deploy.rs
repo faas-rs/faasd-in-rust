@@ -1,4 +1,4 @@
-use super::IAmHandler;
+use crate::types::config::IAmHandler;
 use crate::types::{self, CreateContainerInfo};
 use actix_web::HttpResponse;
 use service::Service;
@@ -13,7 +13,7 @@ impl IAmHandler for DeployHandler {
     type Input = CreateContainerInfo;
     // type Output = String;
 
-    async fn execute(&self, input: Self::Input) -> impl actix_web::Responder {
+    async fn execute(&mut self, input: Self::Input) -> impl actix_web::Responder {
         let cid = input.container_id.clone();
         let image = input.image.clone();
         let ns = input.ns.clone();
