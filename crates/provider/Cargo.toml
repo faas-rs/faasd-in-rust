@@ -30,3 +30,4 @@ async-trait = "0.1"
 lazy_static = "1.4.0"
 log = "0.4"
 my-workspace-hack = { version = "0.1", path = "../my-workspace-hack" }
+url = "2.4"

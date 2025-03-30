@@ -6,3 +6,4 @@ pub mod logs;
 pub mod metrics;
 pub mod proxy;
 pub mod types;
+pub mod consts;

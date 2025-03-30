@@ -2,6 +2,7 @@ pub mod deploy;
 pub mod function_get;
 pub mod function_list;
 pub mod namespace_list;
+pub mod invoke_resolver;
 
 use actix_web::{HttpRequest, HttpResponse, Responder};
 
