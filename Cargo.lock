@@ -839,6 +839,7 @@ version = "0.1.0"
 dependencies = [
  "actix-web",
  "my-workspace-hack",
+ "provider",
  "serde 1.0.217",
  "serde_json",
  "service",

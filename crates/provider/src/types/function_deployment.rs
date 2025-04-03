@@ -62,8 +62,9 @@ pub struct FunctionDeployment {
 //     #[serde(skip_serializing_if = "Option::is_none")]
 //     pub cpu: Option<String>,
 // }
-
+#[derive(serde::Deserialize)]
 pub struct DeployFunctionInfo {
-    pub req: HttpRequest,
-    pub payload: web::Payload,
+    pub function_name: String,
+    pub namespace: Option<String>,
+    pub image: String,
 }

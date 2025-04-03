@@ -1,6 +1,5 @@
 use futures::StreamExt;
-use service::Service;
-use std::{sync::Arc, time::Duration};
+use std::time::Duration;
 
 use actix_web::{Error, HttpRequest, HttpResponse, Responder, http::Method, web};
 use reqwest::{Client, RequestBuilder, redirect};
@@ -8,43 +7,8 @@ use url::Url;
 
 use crate::{
     handlers::invoke_resolver::InvokeResolver,
-    types::config::{FaaSConfig, IAmHandler},
+    types::config::FaaSConfig,
 };
-
-use super::ProxyHandlerInfo;
-
-pub struct Proxy {}
-
-impl IAmHandler for Proxy {
-    type Input = ProxyHandlerInfo;
-
-    async fn execute(&mut self, input: Self::Input) -> impl Responder {
-        let resolver = input
-            .resolver
-            .expect("empty proxy handler resolver, cannot be nil");
-        let req = input.req;
-        let config = input.config;
-        let payload = input.payload;
-
-        let proxy_client = new_proxy_client_from_config(&config).await;
-
-        match *req.method() {
-            Method::POST
-            | Method::PUT
-            | Method::DELETE
-            | Method::GET
-            | Method::PATCH
-            | Method::HEAD
-            | Method::OPTIONS => {
-                match proxy_request(&req, payload, &proxy_client, &resolver).await {
-                    Ok(resp) => resp,
-                    Err(e) => HttpResponse::InternalServerError().body(e.to_string()),
-                }
-            }
-            _ => HttpResponse::MethodNotAllowed().body("method not allowed"),
-        }
-    }
-}
 
 pub async fn proxy_handler(
     config: web::Data<FaaSConfig>,

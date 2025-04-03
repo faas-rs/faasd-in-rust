@@ -4,17 +4,6 @@ use std::time::Duration;
 const DEFAULT_READ_TIMEOUT: Duration = Duration::from_secs(10);
 const DEFAULT_MAX_IDLE_CONNS: usize = 1024;
 
-pub trait IAmHandler {
-    type Input;
-    // type Output: Serialize + Send + 'static;
-
-    // /// 获取Handler元数据（函数名、超时时间等）
-    // fn metadata(&self) -> HandlerMeta;
-
-    /// 执行核心逻辑
-    fn execute(&mut self, input: Self::Input) -> impl std::future::Future<Output = impl Responder> /*+ Send*/;
-}
-
 #[derive(Debug, Clone)]
 pub struct FaaSConfig {
     pub tcp_port: Option<u16>,
