@@ -1,8 +1,9 @@
+pub mod delete;
 pub mod deploy;
 pub mod function_get;
 pub mod function_list;
 pub mod invoke_resolver;
-pub mod namespace_list;
+pub mod utils;
 
 use actix_web::{HttpRequest, HttpResponse, Responder};
 
