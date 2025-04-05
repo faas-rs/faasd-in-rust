@@ -105,7 +105,7 @@ impl Service {
             _ => ns,
         };
 
-        let _mount = self.prepare_snapshot(cid, ns,image_name).await?;
+        let _mount = self.prepare_snapshot(cid, ns, image_name).await?;
         let (env, args) = self.get_env_and_args(image_name, ns).await?;
         let spec_path = generate_spec(cid, ns, args, env).unwrap();
         let spec = fs::read_to_string(spec_path).unwrap();
