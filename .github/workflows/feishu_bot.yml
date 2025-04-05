@@ -2,13 +2,11 @@ name: Notify Feishu on Issue, PR, or Commit
 
 on:
   issues:
-    types: [opened, closed]
+    types: [opened, closed, labeled, unlabeled, assigned, unassigned]
   pull_request:
-    types: [opened, closed]
+    types: [opened, closed, synchronize, review_requested, review_request_removed]
   push:
-    branches:
-      - master
-      - main
+    branches-ignore: []
 
 jobs:
   notify_feishu:
@@ -16,35 +14,141 @@ jobs:
     steps:
       - name: Send message to Feishu
         env:
-          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }} # 建议将 机器人的webhook URL 存储在 GitHub Secrets 中
+          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
+          FEISHU_APP_VERSION: "1.0.5"
         run: |
           EVENT_TYPE="${{ github.event_name }}"
           TIMESTAMP=$(TZ=Asia/Shanghai date +"%Y-%m-%d %H:%M:%S") # 获取当前北京时间
-          
 
           echo "Event type: $EVENT_TYPE"
           echo "Timestamp: $TIMESTAMP"
-          
+         
           if [ "$EVENT_TYPE" = "issues" ]; then
             ISSUE_TITLE="${{ github.event.issue.title }}"
             ISSUE_NUMBER="${{ github.event.issue.number }}"
             ISSUE_URL="${{ github.event.issue.html_url }}"
-            ISSUE_STATE="${{ github.event.issue.state }}" # 获取 issue 的状态（如 open 或 closed）
-            ISSUE_USER="${{ github.event.issue.user.login }}" # 获取操作者的用户名
-            MESSAGE="{\"msg_type\":\"text\",\"content\":{\"text\":\"Issue #$ISSUE_NUMBER: $ISSUE_TITLE\nState: $ISSUE_STATE\nEdited by: $ISSUE_USER\nTimestamp: $TIMESTAMP\n$ISSUE_URL\"}}"
+            ISSUE_STATE="${{ github.event.issue.state }}"
+            ISSUE_USER="${{ github.event.issue.user.login }}"
+            ISSUE_ACTION="${{ github.event.action }}"
+
+            # 动态生成 event_message
+            if [ "$ISSUE_ACTION" = "opened" ]; then
+              EVENT_MESSAGE="创建了新 Issue"
+            elif [ "$ISSUE_ACTION" = "closed" ]; then
+              EVENT_MESSAGE="关闭了 Issue"
+            elif [ "$ISSUE_ACTION" = "labeled" ]; then
+              LABEL_NAME="${{ github.event.label.name }}"
+              EVENT_MESSAGE="给 Issue 添加了标签: @$LABEL_NAME"
+            elif [ "$ISSUE_ACTION" = "unlabeled" ]; then
+              LABEL_NAME="${{ github.event.label.name }}"
+              EVENT_MESSAGE="从 Issue 移除了标签: @$LABEL_NAME"
+            elif [ "$ISSUE_ACTION" = "assigned" ]; then
+              ASSIGNED_USER="${{ github.event.assignee.login }}"
+              EVENT_MESSAGE="将 Issue 分配给了 @$ASSIGNED_USER"
+            elif [ "$ISSUE_ACTION" = "unassigned" ]; then
+              ASSIGNED_USER="${{ github.event.assignee.login }}"
+              EVENT_MESSAGE="取消了 Issue 的分配: @$ASSIGNED_USER"
+            else
+              EVENT_MESSAGE="发生了未定义的 Issue 事件"
+            fi
+
+            MESSAGE='{
+              "msg_type": "interactive",
+              "card": {
+                "type": "template",
+                "data": {
+                  "template_id": "AAqRBHcGUbieD",
+                  "template_version": "1.0.5",
+                  "template_variable": {
+                    "event_type": "issues",
+                    "event_message": "'"$EVENT_MESSAGE"'",
+                    "event_title": "'"$ISSUE_TITLE"'",
+                    "user": "'"$ISSUE_USER"'",
+                    "event_state": "'"$ISSUE_STATE"'",
+                    "timestamp": "'"$TIMESTAMP"'",
+                    "url": "'"$ISSUE_URL"'",
+                    "event_number": "'"$ISSUE_NUMBER"'"
+                  }
+                }
+              }
+            }'
+
           elif [ "$EVENT_TYPE" = "pull_request" ]; then
             PR_TITLE="${{ github.event.pull_request.title }}"
             PR_NUMBER="${{ github.event.pull_request.number }}"
             PR_URL="${{ github.event.pull_request.html_url }}"
-            PR_USER="${{ github.event.pull_request.user.login }}" # 获取 PR 的操作者
-            PR_STATE="${{ github.event.pull_request.state }}" # 获取 PR 的状态
-            MESSAGE="{\"msg_type\":\"text\",\"content\":{\"text\":\"PR #$PR_NUMBER: $PR_TITLE\nState: $PR_STATE\nOpened by: $PR_USER\nTimestamp: $TIMESTAMP\n$PR_URL\"}}"
+            PR_USER="${{ github.event.pull_request.user.login }}"
+            PR_STATE="${{ github.event.pull_request.state }}"
+            PR_ACTION="${{ github.event.action }}"
+
+            # 动态生成 event_message
+            if [ "$PR_ACTION" = "opened" ]; then
+              EVENT_MESSAGE="创建了新 PR"
+            elif [ "$PR_ACTION" = "closed" ]; then
+              EVENT_MESSAGE="关闭了 PR"
+            elif [ "$PR_ACTION" = "synchronize" ]; then
+              EVENT_MESSAGE="更新了 PR"
+            elif [ "$PR_ACTION" = "review_requested" ]; then
+              REVIEWER_USER="${{ github.event.requested_reviewer.login }}"
+              EVENT_MESSAGE="请求 @$REVIEWER_USER 审查 PR"
+            elif [ "$PR_ACTION" = "review_request_removed" ]; then
+              REVIEWER_USER="${{ github.event.requested_reviewer.login }}"
+              EVENT_MESSAGE="取消了 @$REVIEWER_USER 的 PR 审查请求"
+            else
+              EVENT_MESSAGE="发生了未定义的 PR 事件"
+            fi
+
+            MESSAGE='{
+              "msg_type": "interactive",
+              "card": {
+                "type": "template",
+                "data": {
+                  "template_id": "AAqRBHcGUbieD",
+                  "template_version": "1.0.5",
+                  "template_variable": {
+                    "event_type": "pull_request",
+                    "event_message": "'"$EVENT_MESSAGE"'",
+                    "event_title": "'"$PR_TITLE"'",
+                    "user": "'"$PR_USER"'",
+                    "event_state": "'"$PR_STATE"'",
+                    "timestamp": "'"$TIMESTAMP"'",
+                    "url": "'"$PR_URL"'",
+                    "event_number": "'"$PR_NUMBER"'"
+                  }
+                }
+              }
+            }'
+
           elif [ "$EVENT_TYPE" = "push" ]; then
-            COMMIT_MESSAGE="${{ github.event.head_commit.message }}" # 获取提交信息
-            COMMIT_AUTHOR="${{ github.event.head_commit.author.name }}" # 获取提交作者
-            COMMIT_URL="${{ github.event.head_commit.url }}" # 获取提交的 URL
-            COMMIT_ID="${{ github.event.head_commit.id }}" # 获取提交的 commit ID
-            MESSAGE="{\"msg_type\":\"text\",\"content\":{\"text\":\"New Commit:\nMessage: $COMMIT_MESSAGE\nAuthor: $COMMIT_AUTHOR\nCommit ID: $COMMIT_ID\nTimestamp: $TIMESTAMP\n$COMMIT_URL\"}}"
+            COMMIT_MESSAGE="${{ github.event.head_commit.message }}"
+            COMMIT_AUTHOR="${{ github.event.head_commit.author.name }}"
+            COMMIT_URL="${{ github.event.head_commit.url }}"
+            COMMIT_ID="${{ github.event.head_commit.id }}"
+
+            # 动态生成 event_message
+            EVENT_MESSAGE="推送了新提交: $COMMIT_MESSAGE"
+
+            MESSAGE='{
+              "msg_type": "interactive",
+              "card": {
+                "type": "template",
+                "data": {
+                  "template_id": "AAqRBHcGUbieD",
+                  "template_version": "1.0.5",
+                  "template_variable": {
+                    "event_type": "push",
+                    "event_message": "'"$EVENT_MESSAGE"'",
+                    "user": "'"$COMMIT_AUTHOR"'",
+                    "event_state": "New Commit",
+                    "timestamp": "'"$TIMESTAMP"'",
+                    "event_title": "'"$COMMIT_MESSAGE"'",
+                    "url": "'"$COMMIT_URL"'",
+                    "event_number": "'"$COMMIT_ID"'"
+                  }
+                }
+              }
+            }'
+            echo "$MESSAGE" 
           else
             echo "Unsupported event type: $EVENT_TYPE"
             exit 1
