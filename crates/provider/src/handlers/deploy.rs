@@ -41,18 +41,18 @@ async fn deploy(
     service: &Arc<Service>,
     config: &FunctionDeployment,
 ) -> Result<(), CustomError> {
-    let namespaces = service
-        .list_namespaces()
-        .await
-        .map_err(|e| map_service_error(e))?;
-    let namespace = config.namespace.clone().unwrap();
+    // let namespaces = service
+    //     .list_namespaces()
+    //     .await
+    //     .map_err(|e| map_service_error(e))?;
+     let namespace = config.namespace.clone().unwrap();
 
-    if !namespaces.contains(&namespace) {
-        return Err(CustomError::ActixError(error::ErrorBadRequest(format!(
-            "Namespace '{}' not valid or does not exist",
-            namespace
-        ))));
-    }
+    // if !namespaces.contains(&namespace) {
+    //     return Err(CustomError::ActixError(error::ErrorBadRequest(format!(
+    //         "Namespace '{}' not valid or does not exist",
+    //         namespace
+    //     ))));
+    // }
     println!("Namespace '{}' validated.", config.namespace.clone().unwrap());
 
     let container_list = service
@@ -67,7 +67,7 @@ async fn deploy(
     }
 
     service
-        .prepare_image(&config.image, &namespace, false)
+        .prepare_image(&config.image, &namespace, true)
         .await
         .map_err(map_service_error)?;
     println!("Image '{}' validated", &config.image);

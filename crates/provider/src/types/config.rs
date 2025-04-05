@@ -1,4 +1,3 @@
-use actix_web::Responder;
 use std::time::Duration;
 
 const DEFAULT_READ_TIMEOUT: Duration = Duration::from_secs(10);

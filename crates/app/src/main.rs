@@ -8,14 +8,9 @@ pub mod types;
 
 use handlers::*;
 use provider::{
-    handlers::{
-        deploy::deploy_handler,
-        delete::delete_handler,
-    },
+    handlers::{delete::delete_handler, deploy::deploy_handler},
     proxy::proxy_handler::proxy_handler,
 };
-
-
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -27,18 +22,20 @@ async fn main() -> std::io::Result<()> {
 
     println!("I'm running!");
 
-    HttpServer::new(move || {
+    let server = HttpServer::new(move || {
         App::new()
             .app_data(web::Data::new(service.clone()))
             .route("/create-container", web::post().to(create_container))
             .route("/remove-container", web::post().to(remove_container))
             .route("/containers", web::get().to(get_container_list))
-            .route("/system/functions",web::post().to(deploy_handler))
-            .route("/system/functions",web::delete().to(delete_handler))
-            .route("/function/{name}{path:/?.*}",web::to(proxy_handler))
+            .route("/system/functions", web::post().to(deploy_handler))
+            .route("/system/functions", web::delete().to(delete_handler))
+            .route("/function/{name}{path:/?.*}", web::to(proxy_handler))
         // 更多路由配置...
     })
-    .bind("0.0.0.0:8090")?
-    .run()
-    .await
+    .bind("0.0.0.0:8090")?;
+
+    println!("0.0.0.0:8090");
+
+    server.run().await
 }

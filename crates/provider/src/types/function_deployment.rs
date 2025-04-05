@@ -1,4 +1,3 @@
-use actix_web::{HttpRequest, web};
 use serde::{Deserialize, Serialize};
 //use std::collections::HashMap;
 
@@ -65,6 +64,8 @@ pub struct FunctionDeployment {
 #[derive(serde::Deserialize)]
 pub struct DeployFunctionInfo {
     pub function_name: String,
-    pub namespace: Option<String>,
     pub image: String,
+    
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub namespace: Option<String>
 }
