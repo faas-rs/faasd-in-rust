@@ -1,6 +1,6 @@
 use crate::Err;
 use serde_json::Value;
-use std::sync::LazyLock;
+use lazy_static::lazy_static;
 use std::{
     fmt::Error,
     fs::{self, File},
@@ -9,14 +9,14 @@ use std::{
     path::Path,
 };
 
-static CNI_BIN_DIR: LazyLock<String> = LazyLock::new(|| {
-    std::env::var("CNI_BIN_DIR").expect("Environment variable CNI_BIN_DIR is not set")
-});
-static CNI_CONF_DIR: LazyLock<String> = LazyLock::new(|| {
-    std::env::var("CNI_CONF_DIR").expect("Environment variable CNI_CONF_DIR is not set")
-});
-static CNI_TOOL: LazyLock<String> =
-    LazyLock::new(|| std::env::var("CNI_TOOL").expect("Environment variable CNI_TOOL is not set"));
+lazy_static! {
+    static ref CNI_BIN_DIR: String =
+        std::env::var("CNI_BIN_DIR").expect("Environment variable CNI_BIN_DIR is not set");
+    static ref CNI_CONF_DIR: String =
+        std::env::var("CNI_CONF_DIR").expect("Environment variable CNI_CONF_DIR is not set");
+    static ref CNI_TOOL: String =
+        std::env::var("CNI_TOOL").expect("Environment variable CNI_TOOL is not set");
+}
 
 // const NET_NS_PATH_FMT: &str = "/proc/{}/ns/net";
 const CNI_DATA_DIR: &str = "/var/run/cni";
