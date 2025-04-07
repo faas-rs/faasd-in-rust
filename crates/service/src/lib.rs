@@ -1,6 +1,7 @@
 pub mod spec;
 pub mod systemd;
 
+use cni::cni_network::init_net_work;
 use containerd_client::{
     Client,
     services::v1::{
@@ -49,8 +50,10 @@ pub struct Service {
 }
 
 impl Service {
-    pub async fn new(endpoint: String) -> Result<Self, Err> {
-        let client = Client::from_path(endpoint).await.unwrap();
+    pub async fn new() -> Result<Self, Err> {
+        let client = Client::from_path("/run/containerd/containerd.sock")
+            .await
+            .unwrap();
         Ok(Service {
             client: Arc::new(client),
             netns_map: GLOBAL_NETNS_MAP.clone(),
@@ -73,8 +76,13 @@ impl Service {
         map.remove(cid);
     }
 
-    async fn prepare_snapshot(&self, cid: &str, ns: &str) -> Result<Vec<Mount>, Err> {
-        let parent_snapshot = self.get_parent_snapshot(cid, ns).await?;
+    async fn prepare_snapshot(
+        &self,
+        cid: &str,
+        ns: &str,
+        img_name: &str,
+    ) -> Result<Vec<Mount>, Err> {
+        let parent_snapshot = self.get_parent_snapshot(img_name, ns).await?;
         let req = PrepareSnapshotRequest {
             snapshotter: "overlayfs".to_string(),
             key: cid.to_string(),
@@ -98,7 +106,7 @@ impl Service {
             _ => ns,
         };
 
-        let _mount = self.prepare_snapshot(cid, ns).await?;
+        let _mount = self.prepare_snapshot(cid, ns, image_name).await?;
         let (env, args) = self.get_env_and_args(image_name, ns).await?;
         let spec_path = generate_spec(cid, ns, args, env).unwrap();
         let spec = fs::read_to_string(spec_path).unwrap();
@@ -232,9 +240,15 @@ impl Service {
             .await?
             .into_inner()
             .mounts;
+        println!("mounts ok");
         drop(sc);
+        println!("drop sc ok");
+        let _=init_net_work()?;
+        println!("init_net_work ok");
         let (ip, path) = cni::cni_network::create_cni_network(cid.to_string(), ns.to_string())?;
+        println!("create_cni_network ok");
         self.save_netns_ip(cid, &path, &ip).await;
+        println!("save_netns_ip ok");
         let mut tc = self.client.tasks();
         let req = CreateTaskRequest {
             container_id: cid.to_string(),
@@ -242,6 +256,7 @@ impl Service {
             ..Default::default()
         };
         let resp = tc.create(with_namespace!(req, ns)).await?;
+        println!("create task ok");
         let pid = resp.into_inner().pid;
         Ok(pid)
     }
@@ -252,6 +267,7 @@ impl Service {
             ..Default::default()
         };
         let _resp = self.client.tasks().start(with_namespace!(req, ns)).await?;
+        println!("Task: {:?} started", cid);
 
         Ok(())
     }
@@ -548,11 +564,11 @@ impl Service {
         ::serde_json::from_slice(&resp).unwrap()
     }
 
-    pub async fn get_img_config(&self, name: &str, ns: &str) -> Option<ImageConfiguration> {
+    pub async fn get_img_config(&self, img_name: &str, ns: &str) -> Option<ImageConfiguration> {
         let mut c = self.client.images();
 
         let req = GetImageRequest {
-            name: name.to_string(),
+            name: img_name.to_string(),
         };
         let resp = c
             .get(with_namespace!(req, ns))
@@ -560,7 +576,7 @@ impl Service {
             .map_err(|e| {
                 eprintln!(
                     "Failed to get the config of {} in namespace {}: {}",
-                    name, ns, e
+                    img_name, ns, e
                 );
                 e
             })
@@ -583,7 +599,7 @@ impl Service {
             .map_err(|e| {
                 eprintln!(
                     "Failed to read content for {} in namespace {}: {}",
-                    name, ns, e
+                    img_name, ns, e
                 );
                 e
             })
@@ -594,13 +610,13 @@ impl Service {
             .map_err(|e| {
                 eprintln!(
                     "Failed to read message for {} in namespace {}: {}",
-                    name, ns, e
+                    img_name, ns, e
                 );
                 e
             })
             .ok()?
             .ok_or_else(|| {
-                eprintln!("No data found for {} in namespace {}", name, ns);
+                eprintln!("No data found for {} in namespace {}", img_name, ns);
                 std::io::Error::new(std::io::ErrorKind::NotFound, "No data found")
             })
             .ok()?
@@ -629,8 +645,8 @@ impl Service {
         Some(img_config)
     }
 
-    async fn get_parent_snapshot(&self, name: &str, ns: &str) -> Result<String, Err> {
-        let img_config = self.get_img_config(name, ns).await.unwrap();
+    async fn get_parent_snapshot(&self, img_name: &str, ns: &str) -> Result<String, Err> {
+        let img_config = self.get_img_config(img_name, ns).await.unwrap();
 
         let mut iter = img_config.rootfs().diff_ids().iter();
         let mut ret = iter

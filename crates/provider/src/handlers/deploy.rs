@@ -3,7 +3,7 @@ use crate::{
     handlers::utils::{CustomError, map_service_error},
     types::function_deployment::{DeployFunctionInfo, FunctionDeployment},
 };
-use actix_web::{HttpResponse, Responder, error, web};
+use actix_web::{HttpResponse, Responder,web};
 
 use service::Service;
 use std::sync::Arc;
@@ -86,7 +86,7 @@ async fn deploy(
         .create_and_start_task(&config.service, &namespace)
         .await
         .map_err(|e| {
-            CustomError::OtherError(format!("failed to start task for container {}", e))
+            CustomError::OtherError(format!("failed to start task for container {},{}", &config.service, e))
         })?;
     println!(
         "Task for container {} was created successfully",

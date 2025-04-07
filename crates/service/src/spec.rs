@@ -329,7 +329,9 @@ pub fn generate_spec(
     let mut spec = populate_default_unix_spec(id, ns);
     spec.process.args = args;
     spec.process.env = env;
-    let path = format!("{}/{}/{}.json", PATH_TO_SPEC_PREFIX, namespace, id);
+    let dir_path = format!("{}/{}", PATH_TO_SPEC_PREFIX, namespace);
+    let path = format!("{}/{}.json", dir_path, id);
+    std::fs::create_dir_all(&dir_path)?;
     save_spec_to_file(&spec, &path)?;
     Ok(path)
 }

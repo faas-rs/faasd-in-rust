@@ -54,9 +54,16 @@ pub fn init_net_work() -> Result<(), Err> {
         fs::create_dir_all(CNI_CONF_DIR)?;
     }
     let net_config = Path::new(CNI_CONF_DIR).join(DEFAULT_CNI_CONF_FILENAME);
-    let mut file = File::create(&net_config)?;
+    let mut file = match File::create(&net_config) {
+        Ok(file) => file,
+        Err(e) => {
+            println!("failed to create net_config: {}", e);
+            return Err(Box::new(e));
+        }
+    };
+    println!("create net_config ok");
     file.write_all(default_cni_conf().as_bytes())?;
-
+    println!("write net_config ok");
     Ok(())
 }
 
@@ -71,15 +78,18 @@ fn get_path(netns: &str) -> String {
 //TODO: 创建网络和删除网络的错误处理
 pub fn create_cni_network(cid: String, ns: String) -> Result<(String, String), Err> {
     // let netid = format!("{}-{}", cid, pid);
+    println!("create_cni_network ok");
     let netns = get_netns(ns.as_str(), cid.as_str());
     let path = get_path(netns.as_str());
     let mut ip = String::new();
+    println!("get path and netns ok");
 
     let output = std::process::Command::new("ip")
         .arg("netns")
         .arg("add")
         .arg(&netns)
         .output()?;
+    println!("ip netns add ok");
 
     if !output.status.success() {
         return Err(Box::new(Error));
@@ -95,10 +105,16 @@ pub fn create_cni_network(cid: String, ns: String) -> Result<(String, String), E
         .output();
     match output {
         Ok(output) => {
+            println!("add_command ok");
             let stdout = String::from_utf8_lossy(&output.stdout);
+            println!("stdout ok");
             let json: Value = match serde_json::from_str(&stdout) {
-                Ok(json) => json,
+                Ok(json) => {
+                    println!("json ok");
+                    json
+                },
                 Err(e) => {
+                    println!("json error: {}", e);
                     return Err(Box::new(e));
                 }
             };
@@ -108,11 +124,13 @@ pub fn create_cni_network(cid: String, ns: String) -> Result<(String, String), E
                     .and_then(|ip| ip.get("address"))
                     .and_then(|addr| addr.as_str())
                 {
+                    println!("get address ok");
                     ip = first_ip.to_string();
                 }
             }
         }
         Err(e) => {
+            println!("add_command error: {}", e);
             return Err(Box::new(e));
         }
     }
