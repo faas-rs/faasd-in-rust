@@ -3,7 +3,7 @@ name: Notify Feishu on Issue, PR, or Commit
 on:
   issues:
     types: [opened, closed, labeled, unlabeled, assigned, unassigned]
-  pull_request:
+  pull_request_target:
     types: [opened, closed, synchronize, review_requested, review_request_removed]
   push:
     branches-ignore: []
