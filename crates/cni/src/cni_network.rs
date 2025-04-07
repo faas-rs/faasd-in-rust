@@ -1,6 +1,6 @@
 use crate::Err;
-use serde_json::Value;
 use lazy_static::lazy_static;
+use serde_json::Value;
 use std::{
     fmt::Error,
     fs::{self, File},
@@ -96,11 +96,13 @@ pub fn create_cni_network(cid: String, ns: String) -> Result<(String, String), E
 
     let bin = CNI_BIN_DIR.as_str();
     let cnitool = CNI_TOOL.as_str();
-    let add_command = format!("export CNI_PATH={bin} && {cnitool} add faasrs-cni-bridge {path}");
-    let output = std::process::Command::new("sh")
-        .arg("-c")
-        .arg(&add_command)
+    let output = std::process::Command::new(cnitool)
+        .arg("add")
+        .arg("faasrs-cni-bridge")
+        .arg(&path)
+        .env("CNI_PATH", bin)
         .output();
+
     match output {
         Ok(output) => {
             let stdout = String::from_utf8_lossy(&output.stdout);
@@ -133,13 +135,13 @@ pub fn delete_cni_network(ns: &str, cid: &str) {
     let path = get_path(&netns);
     let bin = CNI_BIN_DIR.as_str();
     let cnitool = CNI_TOOL.as_str();
-    let del_command = format!("export CNI_PATH={bin} && {cnitool} del faasrs-cni-bridge {path}");
 
-    let _output_del = std::process::Command::new("sh")
-        .arg("-c")
-        .arg(&del_command)
-        .output()
-        .expect("Failed to execute del command");
+    let _output_del = std::process::Command::new(cnitool)
+        .arg("del")
+        .arg("faasrs-cni-bridge")
+        .arg(&path)
+        .env("CNI_PATH", bin)
+        .output();
     let _output = std::process::Command::new("ip")
         .arg("netns")
         .arg("delete")
