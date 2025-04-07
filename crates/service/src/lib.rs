@@ -637,7 +637,10 @@ impl Service {
     }
 
     async fn get_parent_snapshot(&self, img_name: &str, ns: &str) -> Result<String, Err> {
-        let img_config = self.get_img_config(img_name, ns).await.unwrap();
+        let img_config = match self.get_img_config(img_name, ns).await {
+            Some(config) => config,
+            None => return Err("Failed to get image configuration".into()),
+        };
 
         let mut iter = img_config.rootfs().diff_ids().iter();
         let mut ret = iter
