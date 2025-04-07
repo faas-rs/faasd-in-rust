@@ -12,7 +12,7 @@ use handlers::*;
 async fn main() -> std::io::Result<()> {
     dotenv::dotenv().ok();
     let service = Arc::new(
-        Service::new("/run/containerd/containerd.sock".to_string())
+        Service::new("/run/containerd/containerd.sock")
             .await
             .unwrap(),
     );
