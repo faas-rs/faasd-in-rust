@@ -49,10 +49,8 @@ pub struct Service {
 }
 
 impl Service {
-    pub async fn new() -> Result<Self, Err> {
-        let client = Client::from_path("/run/containerd/containerd.sock")
-            .await
-            .unwrap();
+    pub async fn new(socket_path: &str) -> Result<Self, Err> {
+        let client = Client::from_path(socket_path).await.unwrap();
         Ok(Service {
             client: Arc::new(client),
             netns_map: GLOBAL_NETNS_MAP.clone(),
