@@ -33,7 +33,6 @@ jobs:
   send-event:
     name: Webhook
     runs-on: ubuntu-latest
-    environment: FEISHU_BOT_WEBHOOK
     steps:
       - uses: Samuka007/feishu-bot-webhook-action@main
         with:
