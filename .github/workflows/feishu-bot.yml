@@ -27,7 +27,7 @@ on:
   pull_request_target:
     types: [assigned, opened, synchronize, reopened]
   push:
-    branches: ['master', 'main', 'feat-feishu_notify']
+    branches: ['master', 'main']
 
 jobs:
   send-event:
