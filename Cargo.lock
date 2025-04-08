@@ -517,6 +517,7 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 name = "cni"
 version = "0.1.0"
 dependencies = [
+ "lazy_static",
  "my-workspace-hack",
  "serde_json",
 ]
@@ -759,6 +760,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "dotenv"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77c90badedccf4105eca100756a0b1289e191f6fcbdadd3cee1d2f614f97da8f"
+
+[[package]]
 name = "either"
 version = "1.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -807,6 +814,7 @@ name = "faas-rs"
 version = "0.1.0"
 dependencies = [
  "actix-web",
+ "dotenv",
  "my-workspace-hack",
  "serde 1.0.217",
  "serde_json",
