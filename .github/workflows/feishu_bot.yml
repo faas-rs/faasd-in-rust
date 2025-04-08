@@ -1,28 +1,30 @@
 name: Feishu synchronize
 
 on:
-  check_run:
-    types: [completed]
-  check_suite:
-    types: [completed]
+  workflow_run:
+    workflows: [ nix-github-actions.yml ]
+    types:
+      - completed
   deployment_status:
   discussion:
     types: [created, edited, answered]
   discussion_comment:
     types: [created]
   issues:
-    types: [opened, edited, milestoned, pinned, reopened]
+    types: [opened, edited, milestoned, pinned, reopened, closed, assigned, unassigned]
   issue_comment:
-    types: [created]
+    types: [created, edited]
   milestone:
     types: [opened, deleted]
   project_card:
     types: [created]
   pull_request:
     branches: ['master', 'main', 'feature/*', 'bugfix/*', 'feat-*', 'fix-*']
-    types: [opened, reopened]
+    types: [opened, reopened, review_requested, review_request_removed, ready_for_review, edited, assigned, unassigned]
+  pull_request_review:
+    types: [submitted, edited, dismissed]
   pull_request_review_comment:
-    types: [created]
+    types: [created, edited, deleted]
   pull_request_target:
     types: [assigned, opened, synchronize, reopened]
   push:
