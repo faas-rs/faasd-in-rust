@@ -1,125 +1,39 @@
-name: Notify Feishu on Issue, PR, or Commit
+name: Feishu synchronize
 
 on:
+  check_run:
+    types: [completed]
+  check_suite:
+    types: [completed]
+  deployment_status:
+  discussion:
+    types: [created, edited, answered]
+  discussion_comment:
+    types: [created]
   issues:
-    types: [opened, closed, labeled, unlabeled, assigned, unassigned]
+    types: [opened, edited, milestoned, pinned, reopened]
+  issue_comment:
+    types: [created]
+  milestone:
+    types: [opened, deleted]
+  project_card:
+    types: [created]
+  pull_request:
+    branches: ['master']
+    types: [opened, reopened]
+  pull_request_review_comment:
+    types: [created]
   pull_request_target:
-    types: [opened, closed, synchronize, review_requested, review_request_removed]
+    types: [assigned, opened, synchronize, reopened]
   push:
-    branches-ignore: []
+    branches: ['master']
 
 jobs:
-  notify_feishu:
+  send-event:
+    name: Webhook
     runs-on: ubuntu-latest
     steps:
-      - name: Send message to Feishu
-        env:
-          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
-          FEISHU_APP_VERSION: "1.0.6"
-        run: |
-          EVENT_TYPE="${{ github.event_name }}"
-          TIMESTAMP=$(TZ=Asia/Shanghai date +"%Y-%m-%d %H:%M:%S") # 获取当前北京时间
-
-          echo "Event type: $EVENT_TYPE"
-          echo "Timestamp: $TIMESTAMP"
-
-          # 初始化公共变量
-          EVENT_MESSAGE=""
-          EVENT_TITLE=""
-          EVENT_URL=""
-          EVENT_USER=""
-          EVENT_STATE=""
-          EVENT_NUMBER=""
-
-          # 根据事件类型提取公共信息
-          if [ "$EVENT_TYPE" = "issues" ]; then
-            EVENT_TITLE="${{ github.event.issue.title }}"
-            EVENT_URL="${{ github.event.issue.html_url }}"
-            EVENT_USER="${{ github.event.issue.user.login }}"
-            EVENT_STATE="${{ github.event.issue.state }}"
-            EVENT_NUMBER="${{ github.event.issue.number }}"
-            EVENT_ACTION="${{ github.event.action }}"
-
-            # 动态生成 event_message
-            if [ "$EVENT_ACTION" = "opened" ]; then
-              EVENT_MESSAGE="创建了新 Issue"
-            elif [ "$EVENT_ACTION" = "closed" ]; then
-              EVENT_MESSAGE="关闭了 Issue"
-            elif [ "$EVENT_ACTION" = "labeled" ]; then
-              LABEL_NAME="${{ github.event.label.name }}"
-              EVENT_MESSAGE="给 Issue 添加了标签: @$LABEL_NAME"
-            elif [ "$EVENT_ACTION" = "unlabeled" ]; then
-              LABEL_NAME="${{ github.event.label.name }}"
-              EVENT_MESSAGE="从 Issue 移除了标签: @$LABEL_NAME"
-            elif [ "$EVENT_ACTION" = "assigned" ]; then
-              ASSIGNED_USER="${{ github.event.assignee.login }}"
-              EVENT_MESSAGE="将 Issue 分配给了 @$ASSIGNED_USER"
-            elif [ "$EVENT_ACTION" = "unassigned" ]; then
-              ASSIGNED_USER="${{ github.event.assignee.login }}"
-              EVENT_MESSAGE="取消了 Issue 的分配: @$ASSIGNED_USER"
-            else
-              EVENT_MESSAGE="发生了未定义的 Issue 事件"
-            fi
-
-          elif [ "$EVENT_TYPE" = "pull_request_target" ]; then
-            EVENT_TITLE="${{ github.event.pull_request.title }}"
-            EVENT_URL="${{ github.event.pull_request.html_url }}"
-            EVENT_USER="${{ github.event.pull_request.user.login }}"
-            EVENT_STATE="${{ github.event.pull_request.state }}"
-            EVENT_NUMBER="${{ github.event.pull_request.number }}"
-            EVENT_ACTION="${{ github.event.action }}"
-
-            # 动态生成 event_message
-            if [ "$EVENT_ACTION" = "opened" ]; then
-              EVENT_MESSAGE="创建了新 PR"
-            elif [ "$EVENT_ACTION" = "closed" ]; then
-              EVENT_MESSAGE="关闭了 PR"
-            elif [ "$EVENT_ACTION" = "synchronize" ]; then
-              EVENT_MESSAGE="更新了 PR"
-            elif [ "$EVENT_ACTION" = "review_requested" ]; then
-              REVIEWER_USER="${{ github.event.requested_reviewer.login }}"
-              EVENT_MESSAGE="请求 @$REVIEWER_USER 审查 PR"
-            elif [ "$EVENT_ACTION" = "review_request_removed" ]; then
-              REVIEWER_USER="${{ github.event.requested_reviewer.login }}"
-              EVENT_MESSAGE="取消了 @$REVIEWER_USER 的 PR 审查请求"
-            else
-              EVENT_MESSAGE="发生了未定义的 PR 事件"
-            fi
-
-          elif [ "$EVENT_TYPE" = "push" ]; then
-            EVENT_TITLE="${{ github.event.head_commit.message }}"
-            EVENT_URL="${{ github.event.head_commit.url }}"
-            EVENT_USER="${{ github.event.head_commit.author.name }}"
-            EVENT_STATE="New Commit"
-            EVENT_NUMBER="${{ github.event.head_commit.id }}"
-            EVENT_MESSAGE="推送了新提交: $EVENT_TITLE"
-
-          else
-            echo "Unsupported event type: $EVENT_TYPE"
-            exit 1
-          fi
-
-          # 使用统一的模板生成消息
-          MESSAGE='{
-            "msg_type": "interactive",
-            "card": {
-              "type": "template",
-              "data": {
-                "template_id": "AAqRBHcGUbieD",
-                "template_version": "1.0.5",
-                "template_variable": {
-                  "event_type": "'"$EVENT_TYPE"'",
-                  "event_message": "'"$EVENT_MESSAGE"'",
-                  "event_title": "'"$EVENT_TITLE"'",
-                  "user": "'"$EVENT_USER"'",
-                  "event_state": "'"$EVENT_STATE"'",
-                  "timestamp": "'"$TIMESTAMP"'",
-                  "url": "'"$EVENT_URL"'",
-                  "event_number": "'"$EVENT_NUMBER"'"
-                }
-              }
-            }
-          }'
-
-          # 发送消息到 Feishu
-          curl -X POST -H "Content-Type: application/json" -d "$MESSAGE" "$FEISHU_WEBHOOK_URL"
+      - uses: junka/feishu-bot-webhook-action@main
+        with:
+          webhook: ${{ secrets.FEISHU_BOT_WEBHOOK }}
+          signkey: ${{ secrets.FEISHU_BOT_SIGNKEY }}
