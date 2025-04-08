@@ -105,6 +105,9 @@ pub fn create_cni_network(cid: String, ns: String) -> Result<(String, String), E
 
     match output {
         Ok(output) => {
+            if !output.status.success() {
+                return Err(Box::new(Error));
+            }
             let stdout = String::from_utf8_lossy(&output.stdout);
             let json: Value = match serde_json::from_str(&stdout) {
                 Ok(json) => json,
