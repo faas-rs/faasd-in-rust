@@ -5,7 +5,6 @@ on:
     workflows: [ nix-github-actions.yml ]
     types:
       - completed
-  deployment_status:
   discussion:
     types: [created, edited, answered]
   discussion_comment:
@@ -28,7 +27,7 @@ on:
   pull_request_target:
     types: [assigned, opened, synchronize, reopened]
   push:
-    branches: ['master', 'main']
+    branches: ['master', 'main', 'feat-feishu_notify']
 
 jobs:
   send-event:
