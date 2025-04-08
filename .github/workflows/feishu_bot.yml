@@ -32,8 +32,9 @@ jobs:
   send-event:
     name: Webhook
     runs-on: ubuntu-latest
+    environment: FEISHU_BOT_WEBHOOK
     steps:
-      - uses: junka/feishu-bot-webhook-action@main
+      - uses: Samuka007/feishu-bot-webhook-action@main
         with:
           webhook: ${{ secrets.FEISHU_BOT_WEBHOOK }}
           signkey: ${{ secrets.FEISHU_BOT_SIGNKEY }}
