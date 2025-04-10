@@ -56,12 +56,13 @@ pub async fn get_function(
     match task {
         Ok(task) => {
             let status = task.status;
-            if status == 2 {
+            if status == 2 | 3 {
                 pid = task.pid;
                 replicas = 1;
             }
         }
-        Err(_) => {
+        Err(e) => {
+            eprintln!("Failed to get task: {}", e);
             replicas = 0;
         }
     }

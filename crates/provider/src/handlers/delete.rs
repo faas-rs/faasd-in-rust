@@ -51,7 +51,10 @@ async fn delete(
         }
     };
     if function.replicas != 0 {
+        println!("  delete_cni_network ing {:?}", function.replicas);
         cni::cni_network::delete_cni_network(namespace, &function_name);
+    } else {
+        println!("  function.replicas {:?}", function.replicas);
     }
     match service.remove_container(&function_name, &namespace).await {
         Ok(_) => Ok(()),

@@ -171,11 +171,13 @@ impl Service {
                 .list(with_namespace!(request, namespace))
                 .await?
                 .into_inner();
+            println!("Tasks: {:?}", responce.tasks);
             drop(tc);
+
             if let Some(task) = responce
                 .tasks
                 .iter()
-                .find(|task| task.container_id == container.id)
+                .find(|task| task.id == container.id)
             {
                 println!("Task found: {}, Status: {}", task.id, task.status);
                 // TASK_UNKNOWN (0) — 未知状态
@@ -185,7 +187,7 @@ impl Service {
                 // TASK_EXITED (4) — 任务已退出
                 // TASK_PAUSED (5) — 任务已暂停
                 // TASK_FAILED (6) — 任务失败
-                self.delete_task(&task.container_id, ns).await;
+                let _ =  self.delete_task(&task.id, ns).await;
             }
 
             let delete_request = DeleteContainerRequest {
@@ -254,7 +256,6 @@ impl Service {
             ..Default::default()
         };
         let resp = tc.create(with_namespace!(req, ns)).await?;
-        println!("create task ok");
         let pid = resp.into_inner().pid;
         Ok(pid)
     }
@@ -293,7 +294,7 @@ impl Service {
     pub async fn resume_task() {
         todo!()
     }
-    pub async fn delete_task(&self, cid: &str, ns: &str) {
+    pub async fn delete_task(&self, cid: &str, ns: &str)-> Result<(), Err> {
         let namespace = self.check_namespace(ns);
         let namespace = namespace.as_str();
 
@@ -309,6 +310,7 @@ impl Service {
             Ok::<(), Err>(())
         })
         .await;
+    println!("  after wait");
 
         let kill_request = KillRequest {
             container_id: cid.to_string(),
@@ -326,22 +328,43 @@ impl Service {
                     container_id: cid.to_string(),
                 };
 
-                let _resp = c
-                    .delete(with_namespace!(req, namespace))
-                    .await
-                    .expect("Failed to delete task");
-                println!("Task: {:?} deleted", cid);
+                // let _resp = c
+                //     .delete(with_namespace!(req, namespace))
+                //     .await
+                //     .expect("Failed to delete task");
+                // println!("Task: {:?} deleted", cid);
+                match c.delete(with_namespace!(req, namespace)).await {
+                    Ok(_) => {
+                        println!("Task: {:?} deleted", cid);
+                        Ok(())
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to delete task: {}", e);
+                        Err(e.into())
+                    }
+                }
             }
-            _ => {
+            Ok(Err(e)) => {
+                eprintln!("Wait task failed: {}", e);
+                Err(e.into())
+            }
+            Err(_) => {
                 let kill_request = KillRequest {
                     container_id: cid.to_string(),
                     signal: 9,
                     all: true,
                     ..Default::default()
                 };
-                c.kill(with_namespace!(kill_request, namespace))
-                    .await
-                    .expect("Failed to FORCE kill task");
+                match c.kill(with_namespace!(kill_request, namespace)).await {
+                    Ok(_) => {
+                        println!("Task: {:?} force killed", cid);
+                        Ok(())
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to force kill task: {}", e);
+                        Err(e.into())
+                    }
+                }
             }
         }
     }
@@ -399,7 +422,7 @@ impl Service {
 
         let task = tasks
             .into_iter()
-            .find(|task| task.container_id == cid)
+            .find(|task| task.id == cid)
             .ok_or_else(|| -> Err { format!("Task for container {} not found", cid).into() })?;
 
         Ok(task)

@@ -31,7 +31,7 @@ pub async fn deploy_handler(
             config.service
         )),
         Err(e) => HttpResponse::InternalServerError().body(format!(
-            "failed to deploy function {}  because {}",
+            "failed to deploy function {}, because {}",
             config.service, e
         )),
     }
