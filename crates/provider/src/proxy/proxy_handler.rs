@@ -5,10 +5,7 @@ use actix_web::{Error, HttpRequest, HttpResponse, Responder, http::Method, web};
 use reqwest::{Client, RequestBuilder, redirect};
 use url::Url;
 
-use crate::{
-    handlers::invoke_resolver::InvokeResolver,
-    types::config::FaaSConfig,
-};
+use crate::{handlers::invoke_resolver::InvokeResolver, types::config::FaaSConfig};
 
 pub async fn proxy_handler(
     config: web::Data<FaaSConfig>,
@@ -30,12 +27,10 @@ pub async fn proxy_handler(
         | Method::GET
         | Method::PATCH
         | Method::HEAD
-        | Method::OPTIONS => {
-            match proxy_request(&req, payload, &proxy_client, &resolver).await {
-                Ok(resp) => resp,
-                Err(e) => HttpResponse::InternalServerError().body(e.to_string()),
-            }
-        }
+        | Method::OPTIONS => match proxy_request(&req, payload, &proxy_client, resolver).await {
+            Ok(resp) => resp,
+            Err(e) => HttpResponse::InternalServerError().body(e.to_string()),
+        },
         _ => HttpResponse::MethodNotAllowed().body("method not allowed"),
     }
 }

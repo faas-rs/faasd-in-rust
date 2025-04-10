@@ -174,11 +174,7 @@ impl Service {
             println!("Tasks: {:?}", responce.tasks);
             drop(tc);
 
-            if let Some(task) = responce
-                .tasks
-                .iter()
-                .find(|task| task.id == container.id)
-            {
+            if let Some(task) = responce.tasks.iter().find(|task| task.id == container.id) {
                 println!("Task found: {}, Status: {}", task.id, task.status);
                 // TASK_UNKNOWN (0) — 未知状态
                 // TASK_CREATED (1) — 任务已创建
@@ -187,7 +183,7 @@ impl Service {
                 // TASK_EXITED (4) — 任务已退出
                 // TASK_PAUSED (5) — 任务已暂停
                 // TASK_FAILED (6) — 任务失败
-                let _ =  self.delete_task(&task.id, ns).await;
+                let _ = self.delete_task(&task.id, ns).await;
             }
 
             let delete_request = DeleteContainerRequest {
@@ -243,7 +239,7 @@ impl Service {
         println!("mounts ok");
         drop(sc);
         println!("drop sc ok");
-        let _=init_net_work()?;
+        let _ = init_net_work();
         println!("init_net_work ok");
         let (ip, path) = cni::cni_network::create_cni_network(cid.to_string(), ns.to_string())?;
         println!("create_cni_network ok");
@@ -294,7 +290,7 @@ impl Service {
     pub async fn resume_task() {
         todo!()
     }
-    pub async fn delete_task(&self, cid: &str, ns: &str)-> Result<(), Err> {
+    pub async fn delete_task(&self, cid: &str, ns: &str) -> Result<(), Err> {
         let namespace = self.check_namespace(ns);
         let namespace = namespace.as_str();
 
@@ -310,7 +306,7 @@ impl Service {
             Ok::<(), Err>(())
         })
         .await;
-    println!("  after wait");
+        println!("  after wait");
 
         let kill_request = KillRequest {
             container_id: cid.to_string(),
@@ -346,7 +342,7 @@ impl Service {
             }
             Ok(Err(e)) => {
                 eprintln!("Wait task failed: {}", e);
-                Err(e.into())
+                Err(e)
             }
             Err(_) => {
                 let kill_request = KillRequest {

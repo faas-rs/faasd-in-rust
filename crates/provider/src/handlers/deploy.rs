@@ -3,7 +3,7 @@ use crate::{
     handlers::utils::{CustomError, map_service_error},
     types::function_deployment::{DeployFunctionInfo, FunctionDeployment},
 };
-use actix_web::{HttpResponse, Responder,web};
+use actix_web::{HttpResponse, Responder, web};
 
 use service::Service;
 use std::sync::Arc;
@@ -21,7 +21,7 @@ pub async fn deploy_handler(
 
     let config = FunctionDeployment {
         service: function_name,
-        image: image,
+        image,
         namespace: Some(namespace),
     };
 
@@ -37,15 +37,12 @@ pub async fn deploy_handler(
     }
 }
 
-async fn deploy(
-    service: &Arc<Service>,
-    config: &FunctionDeployment,
-) -> Result<(), CustomError> {
+async fn deploy(service: &Arc<Service>, config: &FunctionDeployment) -> Result<(), CustomError> {
     // let namespaces = service
     //     .list_namespaces()
     //     .await
     //     .map_err(|e| map_service_error(e))?;
-     let namespace = config.namespace.clone().unwrap();
+    let namespace = config.namespace.clone().unwrap();
 
     // if !namespaces.contains(&namespace) {
     //     return Err(CustomError::ActixError(error::ErrorBadRequest(format!(
@@ -53,12 +50,15 @@ async fn deploy(
     //         namespace
     //     ))));
     // }
-    println!("Namespace '{}' validated.", config.namespace.clone().unwrap());
+    println!(
+        "Namespace '{}' validated.",
+        config.namespace.clone().unwrap()
+    );
 
     let container_list = service
         .get_container_list(&namespace)
         .await
-        .map_err(|e| CustomError::from(e))?;
+        .map_err(CustomError::from)?;
 
     if container_list.contains(&config.service) {
         return Err(CustomError::OtherError(
@@ -86,7 +86,10 @@ async fn deploy(
         .create_and_start_task(&config.service, &namespace)
         .await
         .map_err(|e| {
-            CustomError::OtherError(format!("failed to start task for container {},{}", &config.service, e))
+            CustomError::OtherError(format!(
+                "failed to start task for container {},{}",
+                &config.service, e
+            ))
         })?;
     println!(
         "Task for container {} was created successfully",
