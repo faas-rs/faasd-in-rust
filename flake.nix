@@ -33,6 +33,8 @@
           strictDeps = true;
           # Add additional build inputs here
           buildInputs = with pkgs; [
+            cni
+            cni-plugins
             openssl
             protobuf
             pkg-config

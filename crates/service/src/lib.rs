@@ -198,7 +198,7 @@ impl Service {
                 .expect("Failed to delete container");
             self.remove_netns_ip(cid).await;
 
-            // println!("Container: {:?} deleted", cc);
+            println!("Container: {:?} deleted", cc);
         } else {
             todo!("Container not found");
         }
