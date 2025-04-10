@@ -65,7 +65,7 @@ pub struct FunctionDeployment {
 pub struct DeployFunctionInfo {
     pub function_name: String,
     pub image: String,
-    
+
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub namespace: Option<String>
+    pub namespace: Option<String>,
 }
