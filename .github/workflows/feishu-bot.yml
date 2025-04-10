@@ -1,0 +1,40 @@
+name: Feishu synchronize
+
+on:
+  workflow_run:
+    workflows: [ nix-github-actions.yml ]
+    types:
+      - completed
+  discussion:
+    types: [created, edited, answered]
+  discussion_comment:
+    types: [created]
+  issues:
+    types: [opened, edited, milestoned, pinned, reopened, closed, assigned, unassigned]
+  issue_comment:
+    types: [created, edited]
+  milestone:
+    types: [opened, deleted]
+  project_card:
+    types: [created]
+  pull_request:
+    branches: ['master', 'main', 'feature/*', 'bugfix/*', 'feat-*', 'fix-*']
+    types: [opened, reopened, review_requested, review_request_removed, ready_for_review, edited, assigned, unassigned]
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+  pull_request_review_comment:
+    types: [created, edited, deleted]
+  pull_request_target:
+    types: [assigned, opened, synchronize, reopened]
+  push:
+    branches: ['master', 'main']
+
+jobs:
+  send-event:
+    name: Webhook
+    runs-on: ubuntu-latest
+    steps:
+      - uses: Samuka007/feishu-bot-webhook-action@main
+        with:
+          webhook: ${{ secrets.FEISHU_BOT_WEBHOOK }}
+          signkey: ${{ secrets.FEISHU_BOT_SIGNKEY }}

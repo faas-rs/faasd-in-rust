@@ -2,7 +2,17 @@ name: Nix Flake actions
 
 on:
   pull_request:
+    paths:
+      - 'crates/**'
+      - 'Cargo.lock'
+      - 'flake.lock'
+      - '.github/workflows/nix-github-actions.yml'
   push:
+    paths:
+      - 'crates/**'
+      - 'Cargo.lock'
+      - 'flake.lock'
+      - '.github/workflows/nix-github-actions.yml'
 
 jobs:
   nix-matrix:

@@ -1,4 +1,5 @@
 use crate::Err;
+use lazy_static::lazy_static;
 use serde_json::Value;
 use std::{
     fmt::Error,
@@ -8,8 +9,15 @@ use std::{
     path::Path,
 };
 
-const CNI_BIN_DIR: &str = "/opt/cni/bin";
-const CNI_CONF_DIR: &str = "/etc/cni/net.d";
+lazy_static! {
+    static ref CNI_BIN_DIR: String =
+        std::env::var("CNI_BIN_DIR").expect("Environment variable CNI_BIN_DIR is not set");
+    static ref CNI_CONF_DIR: String =
+        std::env::var("CNI_CONF_DIR").expect("Environment variable CNI_CONF_DIR is not set");
+    static ref CNI_TOOL: String =
+        std::env::var("CNI_TOOL").expect("Environment variable CNI_TOOL is not set");
+}
+
 // const NET_NS_PATH_FMT: &str = "/proc/{}/ns/net";
 const CNI_DATA_DIR: &str = "/var/run/cni";
 const DEFAULT_CNI_CONF_FILENAME: &str = "10-faasrs.conflist";
@@ -50,20 +58,14 @@ fn default_cni_conf() -> String {
 }
 
 pub fn init_net_work() -> Result<(), Err> {
-    if !dir_exists(Path::new(CNI_CONF_DIR)) {
-        fs::create_dir_all(CNI_CONF_DIR)?;
+    let cni_conf_dir = CNI_CONF_DIR.as_str();
+    if !dir_exists(Path::new(cni_conf_dir)) {
+        fs::create_dir_all(cni_conf_dir)?;
     }
-    let net_config = Path::new(CNI_CONF_DIR).join(DEFAULT_CNI_CONF_FILENAME);
-    let mut file = match File::create(&net_config) {
-        Ok(file) => file,
-        Err(e) => {
-            println!("failed to create net_config: {}", e);
-            return Err(Box::new(e));
-        }
-    };
-    println!("create net_config ok");
+    let net_config = Path::new(cni_conf_dir).join(DEFAULT_CNI_CONF_FILENAME);
+    let mut file = File::create(&net_config)?;
     file.write_all(default_cni_conf().as_bytes())?;
-    println!("write net_config ok");
+
     Ok(())
 }
 
@@ -78,43 +80,38 @@ fn get_path(netns: &str) -> String {
 //TODO: 创建网络和删除网络的错误处理
 pub fn create_cni_network(cid: String, ns: String) -> Result<(String, String), Err> {
     // let netid = format!("{}-{}", cid, pid);
-    println!("create_cni_network ok");
     let netns = get_netns(ns.as_str(), cid.as_str());
     let path = get_path(netns.as_str());
     let mut ip = String::new();
-    println!("get path and netns ok");
 
     let output = std::process::Command::new("ip")
         .arg("netns")
         .arg("add")
         .arg(&netns)
         .output()?;
-    println!("ip netns add ok");
 
     if !output.status.success() {
         return Err(Box::new(Error));
     }
 
-    let add_command = format!(
-        "export CNI_PATH={} && cnitool add faasrs-cni-bridge {}",
-        CNI_BIN_DIR, path
-    );
-    let output = std::process::Command::new("sh")
-        .arg("-c")
-        .arg(&add_command)
+    let bin = CNI_BIN_DIR.as_str();
+    let cnitool = CNI_TOOL.as_str();
+    let output = std::process::Command::new(cnitool)
+        .arg("add")
+        .arg("faasrs-cni-bridge")
+        .arg(&path)
+        .env("CNI_PATH", bin)
         .output();
+
     match output {
         Ok(output) => {
-            println!("add_command ok");
+            if !output.status.success() {
+                return Err(Box::new(Error));
+            }
             let stdout = String::from_utf8_lossy(&output.stdout);
-            println!("stdout ok");
             let json: Value = match serde_json::from_str(&stdout) {
-                Ok(json) => {
-                    println!("json ok");
-                    json
-                },
+                Ok(json) => json,
                 Err(e) => {
-                    println!("json error: {}", e);
                     return Err(Box::new(e));
                 }
             };
@@ -124,13 +121,11 @@ pub fn create_cni_network(cid: String, ns: String) -> Result<(String, String), E
                     .and_then(|ip| ip.get("address"))
                     .and_then(|addr| addr.as_str())
                 {
-                    println!("get address ok");
                     ip = first_ip.to_string();
                 }
             }
         }
         Err(e) => {
-            println!("add_command error: {}", e);
             return Err(Box::new(e));
         }
     }
@@ -141,15 +136,15 @@ pub fn create_cni_network(cid: String, ns: String) -> Result<(String, String), E
 pub fn delete_cni_network(ns: &str, cid: &str) {
     let netns = get_netns(ns, cid);
     let path = get_path(&netns);
-    let del_command = format!(
-        "export CNI_PATH={} && cnitool del faasrs-cni-bridge {}",
-        CNI_BIN_DIR, path
-    );
-    let _output_del = std::process::Command::new("sh")
-        .arg("-c")
-        .arg(&del_command)
-        .output()
-        .expect("Failed to execute del command");
+    let bin = CNI_BIN_DIR.as_str();
+    let cnitool = CNI_TOOL.as_str();
+
+    let _output_del = std::process::Command::new(cnitool)
+        .arg("del")
+        .arg("faasrs-cni-bridge")
+        .arg(&path)
+        .env("CNI_PATH", bin)
+        .output();
     let _output = std::process::Command::new("ip")
         .arg("netns")
         .arg("delete")
