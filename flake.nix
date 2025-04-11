@@ -13,7 +13,7 @@
   };
 
   outputs = { self, nixpkgs, crane, flake-utils, rust-overlay, nix-github-actions, ... }:
-    flake-utils.lib.eachDefaultSystem (system:
+    flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-linux" ] (system:
       let
       # reference: https://crane.dev/examples/quick-start-workspace.html
         overlays = [ (import rust-overlay) ];
@@ -155,9 +155,7 @@
     // {
       githubActions = nix-github-actions.lib.mkGithubMatrix {
         checks.x86_64-linux = self.checks.x86_64-linux;
-        checks.x86_64-darwin.faas-rs-crate = self.checks.x86_64-darwin.faas-rs-crate;
         checks.aarch64-linux.faas-rs-crate = self.checks.aarch64-linux.faas-rs-crate;
-        checks.aarch64-darwin.faas-rs-crate = self.checks.aarch64-darwin.faas-rs-crate;
       };
     };
 }
