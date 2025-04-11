@@ -1,3 +1,4 @@
 /target
 .direnv/*
 result
+.vscode/settings.json
