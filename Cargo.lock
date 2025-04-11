@@ -1661,7 +1661,6 @@ name = "my-workspace-hack"
 version = "0.1.0"
 dependencies = [
  "actix-router",
- "bitflags 2.8.0",
  "bytes",
  "futures-channel",
  "futures-task",

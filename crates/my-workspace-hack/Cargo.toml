@@ -50,12 +50,10 @@ tracing = { version = "0.1", features = ["log"] }
 tracing-core = { version = "0.1", default-features = false, features = ["std"] }
 
 [target.x86_64-unknown-linux-gnu.dependencies]
-bitflags = { version = "2", default-features = false, features = ["std"] }
 getrandom = { version = "0.2", default-features = false, features = ["std"] }
 libc = { version = "0.2" }
 
 [target.x86_64-unknown-linux-gnu.build-dependencies]
-bitflags = { version = "2", default-features = false, features = ["std"] }
 getrandom = { version = "0.2", default-features = false, features = ["std"] }
 libc = { version = "0.2" }
 
