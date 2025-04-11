@@ -21,7 +21,7 @@ pub async fn delete_handler(
         .unwrap_or_else(|| consts::DEFAULT_FUNCTION_NAMESPACE.to_string());
 
     match delete(&function_name, &namespace, &service).await {
-        Ok(_) => {
+        Ok(()) => {
             HttpResponse::Ok().body(format!("function {} deleted successfully", function_name))
         }
         Err(e) => HttpResponse::InternalServerError().body(format!(
@@ -43,22 +43,18 @@ async fn delete(
             namespace
         ))));
     }
-    let function = match get_function(service, function_name, namespace).await {
-        Ok(function) => function,
-        Err(e) => {
-            return Err(CustomError::FunctionError(e));
-        }
-    };
+    let function = get_function(service, function_name, namespace).await?;
     if function.replicas != 0 {
         println!("  delete_cni_network ing {:?}", function.replicas);
         cni::cni_network::delete_cni_network(namespace, function_name);
     } else {
         println!("  function.replicas {:?}", function.replicas);
     }
-    match service.remove_container(function_name, namespace).await {
-        Ok(_) => Ok(()),
-        Err(e) => Err(CustomError::OtherError(e.to_string())),
-    }
+    service
+        .remove_container(function_name, namespace)
+        .await
+        .map_err(map_service_error)?;
+    Ok(())
 }
 
 #[derive(Serialize, Deserialize)]

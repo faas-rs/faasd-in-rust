@@ -17,7 +17,7 @@ pub async fn deploy_handler(
     let namespace = info
         .namespace
         .clone()
-        .unwrap_or_else(|| consts::DEFAULT_FUNCTION_NAMESPACE.to_string());
+        .unwrap_or(consts::DEFAULT_FUNCTION_NAMESPACE.to_string());
 
     let config = FunctionDeployment {
         service: function_name,
@@ -26,7 +26,7 @@ pub async fn deploy_handler(
     };
 
     match deploy(&service, &config).await {
-        Ok(_) => HttpResponse::Accepted().body(format!(
+        Ok(()) => HttpResponse::Accepted().body(format!(
             "Function {} deployment initiated successfully .",
             config.service
         )),

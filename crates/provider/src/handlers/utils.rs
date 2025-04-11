@@ -57,3 +57,9 @@ impl From<tonic::Status> for CustomError {
         CustomError::GrpcError(err)
     }
 }
+
+impl From<FunctionError> for CustomError {
+    fn from(err: FunctionError) -> Self {
+        CustomError::FunctionError(err)
+    }
+}

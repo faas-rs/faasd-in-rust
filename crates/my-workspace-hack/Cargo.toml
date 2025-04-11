@@ -57,4 +57,12 @@ libc = { version = "0.2" }
 getrandom = { version = "0.2", default-features = false, features = ["std"] }
 libc = { version = "0.2" }
 
+[target.aarch64-unknown-linux-gnu.dependencies]
+getrandom = { version = "0.2", default-features = false, features = ["std"] }
+libc = { version = "0.2" }
+
+[target.aarch64-unknown-linux-gnu.build-dependencies]
+getrandom = { version = "0.2", default-features = false, features = ["std"] }
+libc = { version = "0.2" }
+
 ### END HAKARI SECTION
