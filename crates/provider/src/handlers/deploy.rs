@@ -83,7 +83,7 @@ async fn deploy(service: &Arc<Service>, config: &FunctionDeployment) -> Result<(
     );
 
     service
-        .create_and_start_task(&config.service, &namespace)
+        .create_and_start_task(&config.service, &namespace,&config.image)
         .await
         .map_err(|e| {
             CustomError::OtherError(format!(

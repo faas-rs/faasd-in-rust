@@ -75,6 +75,7 @@ impl Service {
 
     pub async fn get_address(&self, cid: &str) -> Option<String> {
         let map = self.netns_map.read().unwrap();
+        println!("get_address map:{:?}", map);
         map.get(cid)
             .map(|net_conf| format!("{}:{}", net_conf.ip, net_conf.ports[0]))
     }
@@ -116,6 +117,7 @@ impl Service {
 
         let _mount = self.prepare_snapshot(cid, ns, image_name).await?;
         let config = self.get_runtime_config(image_name, ns).await?;
+        println!("create_container get_runtime_config ok,congfig:{:?}", config);
         let env = config.env;
         let args = config.args;
         let spec_path = generate_spec(cid, ns, args, env).unwrap();
@@ -217,7 +219,7 @@ impl Service {
         Ok(())
     }
 
-    pub async fn create_and_start_task(&self, cid: &str, ns: &str) -> Result<(), Err> {
+    pub async fn create_and_start_task(&self, cid: &str, ns: &str,img_name: &str) -> Result<(), Err> {
         // let tmp = std::env::temp_dir().join("containerd-client-test");
         // println!("Temp dir: {:?}", tmp);
         // fs::create_dir_all(&tmp).expect("Failed to create temp directory");
@@ -232,13 +234,13 @@ impl Service {
             "" => spec::DEFAULT_NAMESPACE,
             _ => ns,
         };
-        self.create_task(cid, namespace).await?;
+        self.create_task(cid, namespace,img_name).await?;
         self.start_task(cid, namespace).await?;
         Ok(())
     }
 
     /// 返回任务的pid
-    async fn create_task(&self, cid: &str, ns: &str) -> Result<u32, Err> {
+    async fn create_task(&self, cid: &str, ns: &str,img_name: &str) -> Result<u32, Err> {
         let mut sc = self.client.snapshots();
         let req = MountsRequest {
             snapshotter: "overlayfs".to_string(),
@@ -255,10 +257,13 @@ impl Service {
         let _ = init_net_work();
         println!("init_net_work ok");
         let (ip, path) = cni::cni_network::create_cni_network(cid.to_string(), ns.to_string())?;
-        let ports = self.get_runtime_config(cid, ns).await?.ports;
-        let network_config = NetworkConfig::new(path, ip, ports);
         println!("create_cni_network ok");
+        let ports = self.get_runtime_config(img_name, ns).await?.ports;
+        println!("create_task get_runtime_config ok,ports:{:?}", ports);
+        let network_config = NetworkConfig::new(path, ip, ports);
         self.save_network_config(cid, network_config).await;
+        let map=self.netns_map.read().unwrap();
+        println!("map:{:?}", map);
         println!("save_netns_ip ok");
         let mut tc = self.client.tasks();
         let req = CreateTaskRequest {
@@ -701,7 +706,13 @@ impl Service {
     }
 
     pub async fn get_runtime_config(&self, name: &str, ns: &str) -> Result<RunTimeConfig, Err> {
-        let img_config = self.get_img_config(name, ns).await.unwrap();
+        let img_config = match self.get_img_config(name, ns).await {
+            Some(config) => config,
+            None => {
+                println!("runtime_config get_img_config failed");
+                return Err("Failed to get image configuration".into());
+            },
+        };
         if let Some(config) = img_config.config() {
             let env = config.env().as_ref().map_or_else(Vec::new, |v| v.clone());
             let args = config.cmd().as_ref().map_or_else(Vec::new, |v| v.clone());
