@@ -117,7 +117,10 @@ impl Service {
 
         let _mount = self.prepare_snapshot(cid, ns, image_name).await?;
         let config = self.get_runtime_config(image_name, ns).await?;
-        println!("create_container get_runtime_config ok,congfig:{:?}", config);
+        println!(
+            "create_container get_runtime_config ok,congfig:{:?}",
+            config
+        );
         let env = config.env;
         let args = config.args;
         let spec_path = generate_spec(cid, ns, args, env).unwrap();
@@ -219,7 +222,12 @@ impl Service {
         Ok(())
     }
 
-    pub async fn create_and_start_task(&self, cid: &str, ns: &str,img_name: &str) -> Result<(), Err> {
+    pub async fn create_and_start_task(
+        &self,
+        cid: &str,
+        ns: &str,
+        img_name: &str,
+    ) -> Result<(), Err> {
         // let tmp = std::env::temp_dir().join("containerd-client-test");
         // println!("Temp dir: {:?}", tmp);
         // fs::create_dir_all(&tmp).expect("Failed to create temp directory");
@@ -234,13 +242,13 @@ impl Service {
             "" => spec::DEFAULT_NAMESPACE,
             _ => ns,
         };
-        self.create_task(cid, namespace,img_name).await?;
+        self.create_task(cid, namespace, img_name).await?;
         self.start_task(cid, namespace).await?;
         Ok(())
     }
 
     /// 返回任务的pid
-    async fn create_task(&self, cid: &str, ns: &str,img_name: &str) -> Result<u32, Err> {
+    async fn create_task(&self, cid: &str, ns: &str, img_name: &str) -> Result<u32, Err> {
         let mut sc = self.client.snapshots();
         let req = MountsRequest {
             snapshotter: "overlayfs".to_string(),
@@ -262,8 +270,6 @@ impl Service {
         println!("create_task get_runtime_config ok,ports:{:?}", ports);
         let network_config = NetworkConfig::new(path, ip, ports);
         self.save_network_config(cid, network_config).await;
-        let map=self.netns_map.read().unwrap();
-        println!("map:{:?}", map);
         println!("save_netns_ip ok");
         let mut tc = self.client.tasks();
         let req = CreateTaskRequest {
@@ -711,7 +717,7 @@ impl Service {
             None => {
                 println!("runtime_config get_img_config failed");
                 return Err("Failed to get image configuration".into());
-            },
+            }
         };
         if let Some(config) = img_config.config() {
             let env = config.env().as_ref().map_or_else(Vec::new, |v| v.clone());
