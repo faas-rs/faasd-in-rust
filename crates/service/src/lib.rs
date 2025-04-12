@@ -177,6 +177,7 @@ impl Service {
                 // TASK_EXITED (4) — 任务已退出
                 // TASK_PAUSED (5) — 任务已暂停
                 // TASK_FAILED (6) — 任务失败
+                let _ = self.kill_task(task.id.to_string(), ns).await;
                 let _ = self.delete_task(&task.id, ns).await;
             }
 

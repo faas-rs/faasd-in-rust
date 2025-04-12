@@ -25,13 +25,13 @@ impl FaaSConfig {
     pub fn new() -> Self {
         Self {
             tcp_port: None,
-            read_timeout: Duration::from_secs(0),
-            write_timeout: Duration::from_secs(0),
+            read_timeout: Duration::from_secs(10),
+            write_timeout: Duration::from_secs(10),
             enable_health: false,
             enable_basic_auth: false,
             secret_mount_path: String::from("/var/openfaas/secrets"),
             max_idle_conns: 0,
-            max_idle_conns_per_host: 0,
+            max_idle_conns_per_host: 10,
         }
     }
     pub fn get_read_timeout(&self) -> Duration {

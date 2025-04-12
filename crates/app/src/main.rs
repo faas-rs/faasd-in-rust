@@ -8,8 +8,9 @@ pub mod types;
 
 use handlers::*;
 use provider::{
-    handlers::{delete::delete_handler, deploy::deploy_handler},
+    handlers::{delete::delete_handler, deploy::deploy_handler, invoke_resolver::InvokeResolver},
     proxy::proxy_handler::proxy_handler,
+    types::config::FaaSConfig,
 };
 
 #[actix_web::main]
@@ -21,11 +22,16 @@ async fn main() -> std::io::Result<()> {
             .unwrap(),
     );
 
+    let resolver = Some(InvokeResolver::new(service.clone()).await);
+    let faas_config = FaaSConfig::new();
+
     println!("I'm running!");
 
     let server = HttpServer::new(move || {
         App::new()
             .app_data(web::Data::new(service.clone()))
+            .app_data(web::Data::new(resolver.clone()))
+            .app_data(web::Data::new(faas_config.clone()))
             .route("/create-container", web::post().to(create_container))
             .route("/remove-container", web::post().to(remove_container))
             .route("/containers", web::get().to(get_container_list))

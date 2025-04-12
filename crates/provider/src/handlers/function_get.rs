@@ -1,7 +1,8 @@
 use crate::handlers::function_list::Function;
 // use service::spec::{ Mount, Spec};
 use actix_web::cookie::time::Duration;
-use std::{collections::HashMap, time::UNIX_EPOCH};
+use service::Service;
+use std::{collections::HashMap, sync::Arc, time::UNIX_EPOCH};
 use thiserror::Error;
 
 const ANNOTATION_LABEL_PREFIX: &str = "com.openfaas.annotations.";
@@ -21,14 +22,14 @@ impl From<Box<dyn std::error::Error>> for FunctionError {
 }
 
 pub async fn get_function(
-    client: &service::Service,
+    service: &Arc<Service>,
     function_name: &str,
     namespace: &str,
 ) -> Result<Function, FunctionError> {
     let cid = function_name;
     let ip = client.get_ip(cid).await.unwrap();
 
-    let container = client
+    let container = service
         .load_container(cid, namespace)
         .await
         .map_err(|e| FunctionError::FunctionNotFound(e.to_string()))?;
@@ -50,7 +51,7 @@ pub async fn get_function(
     let timestamp = container.created_at.unwrap_or_default();
     let created_at = UNIX_EPOCH + Duration::new(timestamp.seconds, timestamp.nanos);
 
-    let task = client
+    let task = service
         .get_task(cid, namespace)
         .await
         .map_err(|e| FunctionError::FunctionNotFound(e.to_string()));
