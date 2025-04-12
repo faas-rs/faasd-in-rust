@@ -37,7 +37,7 @@ use tokio::time::timeout;
 // config.json,dockerhub密钥
 // const DOCKER_CONFIG_DIR: &str = "/var/lib/faasd/.docker/";
 
-type NetnsMap = Arc<RwLock<HashMap<String, (String, String)>>>;
+type NetnsMap = Arc<RwLock<HashMap<String, NetworkConfig>>>;
 lazy_static::lazy_static! {
     static ref GLOBAL_NETNS_MAP: NetnsMap = Arc::new(RwLock::new(HashMap::new()));
 }
@@ -58,15 +58,25 @@ impl Service {
         })
     }
 
-    pub async fn save_netns_ip(&self, cid: &str, netns: &str, ip: &str) {
+    pub async fn save_network_config(&self, cid: &str, net_conf: NetworkConfig) {
         let mut map = self.netns_map.write().unwrap();
-        map.insert(cid.to_string(), (netns.to_string(), ip.to_string()));
+        map.insert(cid.to_string(), net_conf);
     }
 
-    pub async fn get_netns_ip(&self, cid: &str) -> Option<(String, String)> {
-        let map: std::sync::RwLockReadGuard<'_, HashMap<String, (String, String)>> =
-            self.netns_map.read().unwrap();
+    pub async fn get_network_config(&self, cid: &str) -> Option<NetworkConfig> {
+        let map = self.netns_map.read().unwrap();
         map.get(cid).cloned()
+    }
+
+    pub async fn get_ip(&self, cid: &str) -> Option<String> {
+        let map = self.netns_map.read().unwrap();
+        map.get(cid).map(|net_conf| net_conf.ip.clone())
+    }
+
+    pub async fn get_address(&self, cid: &str) -> Option<String> {
+        let map = self.netns_map.read().unwrap();
+        map.get(cid)
+            .map(|net_conf| format!("{}:{}", net_conf.ip, net_conf.ports[0]))
     }
 
     pub async fn remove_netns_ip(&self, cid: &str) {
@@ -105,7 +115,9 @@ impl Service {
         };
 
         let _mount = self.prepare_snapshot(cid, ns, image_name).await?;
-        let (env, args) = self.get_env_and_args(image_name, ns).await?;
+        let config = self.get_runtime_config(image_name, ns).await?;
+        let env = config.env;
+        let args = config.args;
         let spec_path = generate_spec(cid, ns, args, env).unwrap();
         let spec = fs::read_to_string(spec_path).unwrap();
 
@@ -242,8 +254,10 @@ impl Service {
         let _ = init_net_work();
         println!("init_net_work ok");
         let (ip, path) = cni::cni_network::create_cni_network(cid.to_string(), ns.to_string())?;
+        let ports = self.get_runtime_config(cid, ns).await?.ports;
+        let network_config = NetworkConfig::new(path, ip, ports);
         println!("create_cni_network ok");
-        self.save_netns_ip(cid, &path, &ip).await;
+        self.save_network_config(cid, network_config).await;
         println!("save_netns_ip ok");
         let mut tc = self.client.tasks();
         let req = CreateTaskRequest {
@@ -685,16 +699,16 @@ impl Service {
         Ok(ret)
     }
 
-    pub async fn get_env_and_args(
-        &self,
-        name: &str,
-        ns: &str,
-    ) -> Result<(Vec<String>, Vec<String>), Err> {
+    pub async fn get_runtime_config(&self, name: &str, ns: &str) -> Result<RunTimeConfig, Err> {
         let img_config = self.get_img_config(name, ns).await.unwrap();
         if let Some(config) = img_config.config() {
             let env = config.env().as_ref().map_or_else(Vec::new, |v| v.clone());
             let args = config.cmd().as_ref().map_or_else(Vec::new, |v| v.clone());
-            Ok((env, args))
+            let ports = config
+                .exposed_ports()
+                .as_ref()
+                .map_or_else(Vec::new, |v| v.clone());
+            Ok(RunTimeConfig::new(env, args, ports))
         } else {
             Err("No config found".into())
         }
@@ -732,3 +746,29 @@ impl Service {
 }
 //容器是容器，要先启动，然后才能运行任务
 //要想删除一个正在运行的Task，必须先kill掉这个task，然后才能删除。
+
+#[derive(Debug)]
+pub struct RunTimeConfig {
+    pub env: Vec<String>,
+    pub args: Vec<String>,
+    pub ports: Vec<String>,
+}
+
+impl RunTimeConfig {
+    pub fn new(env: Vec<String>, args: Vec<String>, ports: Vec<String>) -> Self {
+        RunTimeConfig { env, args, ports }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct NetworkConfig {
+    pub netns: String,
+    pub ip: String,
+    pub ports: Vec<String>,
+}
+
+impl NetworkConfig {
+    pub fn new(netns: String, ip: String, ports: Vec<String>) -> Self {
+        NetworkConfig { netns, ip, ports }
+    }
+}

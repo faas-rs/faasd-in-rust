@@ -24,10 +24,7 @@ pub async fn get_function(
     namespace: &str,
 ) -> Result<Function, FunctionError> {
     let cid = function_name;
-    let (_, ip) = client
-        .get_netns_ip(cid)
-        .await
-        .unwrap_or((namespace.to_string(), String::new()));
+    let ip = client.get_ip(cid).await.unwrap();
 
     let container = client
         .load_container(cid, namespace)
@@ -42,7 +39,7 @@ pub async fn get_function(
     let all_labels = container.labels;
     let (labels, _) = build_labels_and_annotations(all_labels);
 
-    let (env, _) = client.get_env_and_args(&image, namespace).await?;
+    let env = client.get_runtime_config(&image, namespace).await?.env;
     let (env_vars, env_process) = read_env_from_process_env(env);
     // let secrets = read_secrets_from_mounts(&spec.mounts);
     // let memory_limit = read_memory_limit_from_spec(&spec);
