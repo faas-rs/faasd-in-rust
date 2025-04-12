@@ -245,8 +245,6 @@ impl Service {
         let (ip, path) = cni::cni_network::create_cni_network(cid.to_string(), ns.to_string())?;
         println!("create_cni_network ok,ip:{}", ip);
         self.save_netns_ip(cid, &path, &ip).await;
-        let ip_map = self.netns_map.read().unwrap();
-        println!("ip_map: {:?}", ip_map);
         let mut tc = self.client.tasks();
         let req = CreateTaskRequest {
             container_id: cid.to_string(),
