@@ -1,7 +1,8 @@
 use crate::handlers::function_list::Function;
 // use service::spec::{ Mount, Spec};
 use actix_web::cookie::time::Duration;
-use std::{collections::HashMap, time::UNIX_EPOCH};
+use service::Service;
+use std::{collections::HashMap, sync::Arc, time::UNIX_EPOCH};
 use thiserror::Error;
 
 const ANNOTATION_LABEL_PREFIX: &str = "com.openfaas.annotations.";
@@ -19,17 +20,17 @@ impl From<Box<dyn std::error::Error>> for FunctionError {
 }
 
 pub async fn get_function(
-    client: &service::Service,
+    service: &Arc<Service>,
     function_name: &str,
     namespace: &str,
 ) -> Result<Function, FunctionError> {
     let cid = function_name;
-    let (_, ip) = client
+    let (_, ip) = service
         .get_netns_ip(cid)
         .await
-        .unwrap_or((namespace.to_string(), String::new()));
+        .unwrap_or((String::new(), String::new()));
 
-    let container = client
+    let container = service
         .load_container(cid, namespace)
         .await
         .map_err(|e| FunctionError::FunctionNotFound(e.to_string()))?;
@@ -42,14 +43,14 @@ pub async fn get_function(
     let all_labels = container.labels;
     let (labels, _) = build_labels_and_annotations(all_labels);
 
-    let (env, _) = client.get_env_and_args(&image, namespace).await?;
+    let (env, _) = service.get_env_and_args(&image, namespace).await?;
     let (env_vars, env_process) = read_env_from_process_env(env);
     // let secrets = read_secrets_from_mounts(&spec.mounts);
     // let memory_limit = read_memory_limit_from_spec(&spec);
     let timestamp = container.created_at.unwrap_or_default();
     let created_at = UNIX_EPOCH + Duration::new(timestamp.seconds, timestamp.nanos);
 
-    let task = client
+    let task = service
         .get_task(cid, namespace)
         .await
         .map_err(|e| FunctionError::FunctionNotFound(e.to_string()));

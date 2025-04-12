@@ -129,6 +129,7 @@ pub fn create_cni_network(cid: String, ns: String) -> Result<(String, String), E
             return Err(Box::new(e));
         }
     }
+    println!("ip: {}", ip);
 
     Ok((ip, path))
 }

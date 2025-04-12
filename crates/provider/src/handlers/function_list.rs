@@ -1,5 +1,6 @@
 use std::{collections::HashMap, time::SystemTime};
 
+#[derive(Debug)]
 pub struct Function {
     pub name: String,
     pub namespace: String,

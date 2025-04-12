@@ -183,6 +183,7 @@ impl Service {
                 // TASK_EXITED (4) — 任务已退出
                 // TASK_PAUSED (5) — 任务已暂停
                 // TASK_FAILED (6) — 任务失败
+                let _ = self.kill_task(task.id.to_string(), ns).await;
                 let _ = self.delete_task(&task.id, ns).await;
             }
 
@@ -242,9 +243,10 @@ impl Service {
         let _ = init_net_work();
         println!("init_net_work ok");
         let (ip, path) = cni::cni_network::create_cni_network(cid.to_string(), ns.to_string())?;
-        println!("create_cni_network ok");
+        println!("create_cni_network ok,ip:{}", ip);
         self.save_netns_ip(cid, &path, &ip).await;
-        println!("save_netns_ip ok");
+        let ip_map = self.netns_map.read().unwrap();
+        println!("ip_map: {:?}", ip_map);
         let mut tc = self.client.tasks();
         let req = CreateTaskRequest {
             container_id: cid.to_string(),

@@ -5,7 +5,7 @@ use crate::{
         utils::{CustomError, map_service_error},
     },
 };
-use actix_web::{HttpResponse, Responder, error, web};
+use actix_web::{HttpResponse, Responder, ResponseError, error, web};
 use serde::{Deserialize, Serialize};
 use service::Service;
 use std::sync::Arc;
@@ -24,10 +24,7 @@ pub async fn delete_handler(
         Ok(()) => {
             HttpResponse::Ok().body(format!("function {} deleted successfully", function_name))
         }
-        Err(e) => HttpResponse::InternalServerError().body(format!(
-            "failed to delete function {} in namespace {} because {}",
-            function_name, namespace, e
-        )),
+        Err(e) => e.error_response(),
     }
 }
 
