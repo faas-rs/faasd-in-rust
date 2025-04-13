@@ -106,7 +106,7 @@ impl ImageManager {
                 Self::pull_image(client, image_name, ns).await?;
             }
         }
-        Ok(())
+        Self::save_img_config(client, image_name, ns).await
     }
 
     pub async fn pull_image(client: &Client, image_name: &str, ns: &str) -> Result<(), ImageError> {
@@ -156,7 +156,8 @@ impl ImageManager {
             )));
         }
 
-        Self::save_img_config(client, image_name, ns.as_str()).await
+        Ok(())
+        // Self::save_img_config(client, image_name, ns.as_str()).await
     }
 
     pub async fn save_img_config(
@@ -231,7 +232,7 @@ impl ImageManager {
         };
         if img_config.is_none() {
             return Err(ImageError::ImageConfigurationNotFound(format!(
-                "Image configuration not found for image {}",
+                "save_img_config: Image configuration not found for image {}",
                 img_name
             )));
         }
@@ -345,7 +346,7 @@ impl ImageManager {
             Ok(config.clone())
         } else {
             Err(ImageError::ImageConfigurationNotFound(format!(
-                "Image configuration not found for image {}",
+                "get_image_config: Image configuration not found for image {}",
                 image_name
             )))
         }
@@ -376,7 +377,7 @@ impl ImageManager {
             }
         } else {
             Err(ImageError::ImageConfigurationNotFound(format!(
-                "Image configuration not found for image {}",
+                "get_runtime_config: Image configuration not found for image {}",
                 image_name
             )))
         }
