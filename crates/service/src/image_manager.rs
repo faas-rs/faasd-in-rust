@@ -355,9 +355,18 @@ impl ImageManager {
         let map = GLOBAL_IMAGE_MAP.read().unwrap();
         if let Some(config) = map.get(image_name) {
             if let Some(config) = config.config() {
-                let env = config.env().clone().unwrap();
-                let args = config.cmd().clone().unwrap();
-                let ports = config.exposed_ports().clone().unwrap();
+                let env = config
+                    .env()
+                    .clone()
+                    .expect("Failed to get environment variables");
+                let args = config
+                    .cmd()
+                    .clone()
+                    .expect("Failed to get command arguments");
+                let ports = config
+                    .exposed_ports()
+                    .clone()
+                    .expect("Failed to get exposed ports");
                 Ok(ImageRuntimeConfig::new(env, args, ports))
             } else {
                 Err(ImageError::ImageConfigurationNotFound(format!(
