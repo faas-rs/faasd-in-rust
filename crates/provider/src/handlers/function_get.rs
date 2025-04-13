@@ -39,7 +39,9 @@ pub async fn get_function(
     let all_labels = container.labels;
     let (labels, _) = build_labels_and_annotations(all_labels);
 
-    let env = client.get_runtime_config(&image, namespace).await?.env;
+    let env = service::image_manager::ImageManager::get_runtime_config(&image)
+        .unwrap()
+        .env;
     let (env_vars, env_process) = read_env_from_process_env(env);
     // let secrets = read_secrets_from_mounts(&spec.mounts);
     // let memory_limit = read_memory_limit_from_spec(&spec);

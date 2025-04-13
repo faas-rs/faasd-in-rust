@@ -46,7 +46,7 @@ async fn delete(
     let function = get_function(service, function_name, namespace).await?;
     if function.replicas != 0 {
         println!("  delete_cni_network ing {:?}", function.replicas);
-        cni::cni_network::delete_cni_network(namespace, function_name);
+        cni::delete_cni_network(namespace, function_name);
     } else {
         println!("  function.replicas {:?}", function.replicas);
     }

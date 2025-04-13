@@ -1,27 +1,21 @@
+pub mod image_manager;
 pub mod spec;
 pub mod systemd;
 
-use cni::cni_network::init_net_work;
 use containerd_client::{
     Client,
     services::v1::{
         Container, CreateContainerRequest, CreateTaskRequest, DeleteContainerRequest,
-        DeleteTaskRequest, GetImageRequest, KillRequest, ListContainersRequest,
-        ListNamespacesRequest, ListTasksRequest, ReadContentRequest, StartRequest, TransferOptions,
-        TransferRequest, WaitRequest,
+        DeleteTaskRequest, KillRequest, ListContainersRequest, ListNamespacesRequest,
+        ListTasksRequest, StartRequest, WaitRequest,
         container::Runtime,
         snapshots::{MountsRequest, PrepareSnapshotRequest},
     },
-    to_any,
     tonic::Request,
-    types::{
-        Mount, Platform,
-        transfer::{ImageStore, OciRegistry, UnpackConfiguration},
-        v1::Process,
-    },
+    types::v1::Process,
     with_namespace,
 };
-use oci_spec::image::{Arch, ImageConfiguration, ImageIndex, ImageManifest, MediaType, Os};
+use image_manager::ImageManager;
 use prost_types::Any;
 use sha2::{Digest, Sha256};
 use spec::{DEFAULT_NAMESPACE, generate_spec};
@@ -30,7 +24,6 @@ use std::{
     fs,
     sync::{Arc, RwLock},
     time::Duration,
-    vec,
 };
 use tokio::time::timeout;
 
@@ -45,7 +38,7 @@ lazy_static::lazy_static! {
 type Err = Box<dyn std::error::Error>;
 
 pub struct Service {
-    client: Arc<Client>,
+    pub client: Arc<Client>,
     netns_map: NetnsMap,
 }
 
@@ -70,13 +63,12 @@ impl Service {
 
     pub async fn get_ip(&self, cid: &str) -> Option<String> {
         let map = self.netns_map.read().unwrap();
-        map.get(cid).map(|net_conf| net_conf.ip.clone())
+        map.get(cid).map(|net_conf| net_conf.get_ip())
     }
 
     pub async fn get_address(&self, cid: &str) -> Option<String> {
         let map = self.netns_map.read().unwrap();
-        map.get(cid)
-            .map(|net_conf| format!("{}:{}", net_conf.ip, net_conf.ports[0]))
+        map.get(cid).map(|net_conf| net_conf.get_address())
     }
 
     pub async fn remove_netns_ip(&self, cid: &str) {
@@ -84,40 +76,33 @@ impl Service {
         map.remove(cid);
     }
 
-    async fn prepare_snapshot(
-        &self,
-        cid: &str,
-        ns: &str,
-        img_name: &str,
-    ) -> Result<Vec<Mount>, Err> {
-        let parent_snapshot = self.get_parent_snapshot(img_name, ns).await?;
+    async fn prepare_snapshot(&self, cid: &str, ns: &str, img_name: &str) -> Result<(), Err> {
+        let parent_snapshot = self.get_parent_snapshot(img_name).await?;
         let req = PrepareSnapshotRequest {
             snapshotter: "overlayfs".to_string(),
             key: cid.to_string(),
             parent: parent_snapshot,
             ..Default::default()
         };
-        let resp = self
+        let _resp = self
             .client
             .snapshots()
             .prepare(with_namespace!(req, ns))
-            .await?
-            .into_inner()
-            .mounts;
+            .await?;
 
-        Ok(resp)
+        Ok(())
     }
 
     pub async fn create_container(&self, image_name: &str, cid: &str, ns: &str) -> Result<(), Err> {
-        let namespace = match ns {
-            "" => spec::DEFAULT_NAMESPACE,
-            _ => ns,
-        };
+        let namespace = self.check_namespace(ns);
+        let namespace = namespace.as_str();
 
-        let _mount = self.prepare_snapshot(cid, ns, image_name).await?;
-        let config = self.get_runtime_config(image_name, ns).await?;
+        self.prepare_snapshot(cid, ns, image_name).await?;
+        let config = ImageManager::get_runtime_config(image_name).unwrap();
+
         let env = config.env;
         let args = config.args;
+
         let spec_path = generate_spec(cid, ns, args, env).unwrap();
         let spec = fs::read_to_string(spec_path).unwrap();
 
@@ -144,14 +129,11 @@ impl Service {
             container: Some(container),
         };
 
-        // let req = with_namespace!(req, namespace);
-
         let _resp = containers_client
             .create(with_namespace!(req, namespace))
             .await
             .expect("Failed to create container");
 
-        // println!("Container: {:?} created", cid);
         Ok(())
     }
 
@@ -206,6 +188,7 @@ impl Service {
                 .delete(with_namespace!(delete_request, namespace))
                 .await
                 .expect("Failed to delete container");
+            //todo 这里删除cni?
             self.remove_netns_ip(cid).await;
 
             println!("Container: {:?} deleted", cc);
@@ -216,49 +199,44 @@ impl Service {
         Ok(())
     }
 
-    pub async fn create_and_start_task(&self, cid: &str, ns: &str) -> Result<(), Err> {
-        // let tmp = std::env::temp_dir().join("containerd-client-test");
-        // println!("Temp dir: {:?}", tmp);
-        // fs::create_dir_all(&tmp).expect("Failed to create temp directory");
-        // let stdin = tmp.join("stdin");
-        // let stdout = tmp.join("stdout");
-        // let stderr = tmp.join("stderr");
-        // File::create(&stdin).expect("Failed to create stdin");
-        // File::create(&stdout).expect("Failed to create stdout");
-        // File::create(&stderr).expect("Failed to create stderr");
-
-        let namespace = match ns {
-            "" => spec::DEFAULT_NAMESPACE,
-            _ => ns,
-        };
-        self.create_task(cid, namespace).await?;
+    pub async fn create_and_start_task(
+        &self,
+        cid: &str,
+        ns: &str,
+        img_name: &str,
+    ) -> Result<(), Err> {
+        let namespace = self.check_namespace(ns);
+        let namespace = namespace.as_str();
+        self.create_task(cid, namespace, img_name).await?;
         self.start_task(cid, namespace).await?;
         Ok(())
     }
 
     /// 返回任务的pid
-    async fn create_task(&self, cid: &str, ns: &str) -> Result<u32, Err> {
+    async fn create_task(&self, cid: &str, ns: &str, img_name: &str) -> Result<u32, Err> {
         let mut sc = self.client.snapshots();
         let req = MountsRequest {
             snapshotter: "overlayfs".to_string(),
             key: cid.to_string(),
         };
+
         let mounts = sc
             .mounts(with_namespace!(req, ns))
             .await?
             .into_inner()
             .mounts;
+
         println!("mounts ok");
         drop(sc);
         println!("drop sc ok");
-        let _ = init_net_work();
+        let _ = cni::init_net_work();
         println!("init_net_work ok");
-        let (ip, path) = cni::cni_network::create_cni_network(cid.to_string(), ns.to_string())?;
-        let ports = self.get_runtime_config(cid, ns).await?.ports;
+        let (ip, path) = cni::create_cni_network(cid.to_string(), ns.to_string())?;
+        let ports = ImageManager::get_runtime_config(img_name).unwrap().ports;
         let network_config = NetworkConfig::new(path, ip, ports);
         println!("create_cni_network ok");
-        self.save_network_config(cid, network_config).await;
-        println!("save_netns_ip ok");
+        self.save_network_config(cid, network_config.clone()).await;
+        println!("save_netns_ip ok, netconfig: {:?}", network_config);
         let mut tc = self.client.tasks();
         let req = CreateTaskRequest {
             container_id: cid.to_string(),
@@ -442,245 +420,8 @@ impl Service {
         todo!()
     }
 
-    pub async fn prepare_image(
-        &self,
-        image_name: &str,
-        ns: &str,
-        always_pull: bool,
-    ) -> Result<(), Err> {
-        if always_pull {
-            self.pull_image(image_name, ns).await?;
-        } else {
-            let namespace = self.check_namespace(ns);
-            let namespace = namespace.as_str();
-            let mut c = self.client.images();
-            let req = GetImageRequest {
-                name: image_name.to_string(),
-            };
-            let resp = c
-                .get(with_namespace!(req, namespace))
-                .await
-                .map_err(|e| {
-                    eprintln!(
-                        "Failed to get the config of {} in namespace {}: {}",
-                        image_name, namespace, e
-                    );
-                    e
-                })
-                .ok()
-                .unwrap()
-                .into_inner();
-            if resp.image.is_none() {
-                self.pull_image(image_name, ns).await?;
-            }
-        }
-        Ok(())
-    }
-
-    pub async fn pull_image(&self, image_name: &str, ns: &str) -> Result<(), Err> {
-        let namespace = self.check_namespace(ns);
-        let namespace = namespace.as_str();
-
-        let mut c = self.client.transfer();
-        let source = OciRegistry {
-            reference: image_name.to_string(),
-            resolver: Default::default(),
-        };
-        // 这里先写死linux amd64
-        let platform = Platform {
-            os: "linux".to_string(),
-            architecture: "amd64".to_string(),
-            ..Default::default()
-        };
-        let dest = ImageStore {
-            name: image_name.to_string(),
-            platforms: vec![platform.clone()],
-            unpacks: vec![UnpackConfiguration {
-                platform: Some(platform),
-                ..Default::default()
-            }],
-            ..Default::default()
-        };
-
-        let anys = to_any(&source);
-        let anyd = to_any(&dest);
-
-        let req = TransferRequest {
-            source: Some(anys),
-            destination: Some(anyd),
-            options: Some(TransferOptions {
-                ..Default::default()
-            }),
-        };
-        c.transfer(with_namespace!(req, namespace))
-            .await
-            .unwrap_or_else(|_| {
-                panic!(
-                    "Unable to transfer image {} to namespace {}",
-                    image_name, namespace
-                )
-            });
-        Ok(())
-    }
-
-    // 不用这个也能拉取镜像？
-    pub fn get_resolver(&self) {
-        todo!()
-    }
-
-    async fn handle_index(&self, data: &[u8], ns: &str) -> Option<ImageConfiguration> {
-        let image_index: ImageIndex = ::serde_json::from_slice(data).unwrap();
-        let img_manifest_dscr = image_index
-            .manifests()
-            .iter()
-            .find(|manifest_entry| match manifest_entry.platform() {
-                Some(p) => {
-                    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-                    {
-                        matches!(p.architecture(), &Arch::Amd64) && matches!(p.os(), &Os::Linux)
-                    }
-                    #[cfg(target_arch = "aarch64")]
-                    {
-                        matches!(p.architecture(), &Arch::ARM64) && matches!(p.os(), Os::Linux)
-                        //&& matches!(p.variant().as_ref().map(|s| s.as_str()), Some("v8"))
-                    }
-                }
-                None => false,
-            })
-            .unwrap();
-
-        let req = ReadContentRequest {
-            digest: img_manifest_dscr.digest().to_owned(),
-            offset: 0,
-            size: 0,
-        };
-
-        let mut c = self.client.content();
-        let resp = c
-            .read(with_namespace!(req, ns))
-            .await
-            .expect("Failed to read content")
-            .into_inner()
-            .message()
-            .await
-            .expect("Failed to read content message")
-            .unwrap()
-            .data;
-
-        self.handle_manifest(&resp, ns).await
-    }
-
-    async fn handle_manifest(&self, data: &[u8], ns: &str) -> Option<ImageConfiguration> {
-        let img_manifest: ImageManifest = ::serde_json::from_slice(data).unwrap();
-        let img_manifest_dscr = img_manifest.config();
-
-        let req = ReadContentRequest {
-            digest: img_manifest_dscr.digest().to_owned(),
-            offset: 0,
-            size: 0,
-        };
-        let mut c = self.client.content();
-
-        let resp = c
-            .read(with_namespace!(req, ns))
-            .await
-            .unwrap()
-            .into_inner()
-            .message()
-            .await
-            .unwrap()
-            .unwrap()
-            .data;
-
-        ::serde_json::from_slice(&resp).unwrap()
-    }
-
-    pub async fn get_img_config(&self, img_name: &str, ns: &str) -> Option<ImageConfiguration> {
-        let mut c = self.client.images();
-
-        let req = GetImageRequest {
-            name: img_name.to_string(),
-        };
-        let resp = c
-            .get(with_namespace!(req, ns))
-            .await
-            .map_err(|e| {
-                eprintln!(
-                    "Failed to get the config of {} in namespace {}: {}",
-                    img_name, ns, e
-                );
-                e
-            })
-            .ok()?
-            .into_inner();
-
-        let img_dscr = resp.image?.target?;
-        let media_type = MediaType::from(img_dscr.media_type.as_str());
-
-        let req = ReadContentRequest {
-            digest: img_dscr.digest,
-            ..Default::default()
-        };
-
-        let mut c = self.client.content();
-
-        let resp = c
-            .read(with_namespace!(req, ns))
-            .await
-            .map_err(|e| {
-                eprintln!(
-                    "Failed to read content for {} in namespace {}: {}",
-                    img_name, ns, e
-                );
-                e
-            })
-            .ok()?
-            .into_inner()
-            .message()
-            .await
-            .map_err(|e| {
-                eprintln!(
-                    "Failed to read message for {} in namespace {}: {}",
-                    img_name, ns, e
-                );
-                e
-            })
-            .ok()?
-            .ok_or_else(|| {
-                eprintln!("No data found for {} in namespace {}", img_name, ns);
-                std::io::Error::new(std::io::ErrorKind::NotFound, "No data found")
-            })
-            .ok()?
-            .data;
-
-        let img_config = match media_type {
-            MediaType::ImageIndex => self.handle_index(&resp, ns).await.unwrap(),
-            MediaType::ImageManifest => self.handle_manifest(&resp, ns).await.unwrap(),
-            MediaType::Other(media_type) => match media_type.as_str() {
-                "application/vnd.docker.distribution.manifest.list.v2+json" => {
-                    self.handle_index(&resp, ns).await.unwrap()
-                }
-                "application/vnd.docker.distribution.manifest.v2+json" => {
-                    self.handle_manifest(&resp, ns).await.unwrap()
-                }
-                _ => {
-                    eprintln!("Unexpected media type '{}'", media_type);
-                    return None;
-                }
-            },
-            _ => {
-                eprintln!("Unexpected media type '{}'", media_type);
-                return None;
-            }
-        };
-        Some(img_config)
-    }
-
-    async fn get_parent_snapshot(&self, img_name: &str, ns: &str) -> Result<String, Err> {
-        let img_config = match self.get_img_config(img_name, ns).await {
-            Some(config) => config,
-            None => return Err("Failed to get image configuration".into()),
-        };
+    async fn get_parent_snapshot(&self, img_name: &str) -> Result<String, Err> {
+        let img_config = image_manager::ImageManager::get_image_config(img_name)?;
 
         let mut iter = img_config.rootfs().diff_ids().iter();
         let mut ret = iter
@@ -697,21 +438,6 @@ impl Service {
             ret = format!("sha256:{digest}");
         }
         Ok(ret)
-    }
-
-    pub async fn get_runtime_config(&self, name: &str, ns: &str) -> Result<RunTimeConfig, Err> {
-        let img_config = self.get_img_config(name, ns).await.unwrap();
-        if let Some(config) = img_config.config() {
-            let env = config.env().as_ref().map_or_else(Vec::new, |v| v.clone());
-            let args = config.cmd().as_ref().map_or_else(Vec::new, |v| v.clone());
-            let ports = config
-                .exposed_ports()
-                .as_ref()
-                .map_or_else(Vec::new, |v| v.clone());
-            Ok(RunTimeConfig::new(env, args, ports))
-        } else {
-            Err("No config found".into())
-        }
     }
 
     fn check_namespace(&self, ns: &str) -> String {
@@ -744,31 +470,32 @@ impl Service {
     //     Ok(())
     // }
 }
-//容器是容器，要先启动，然后才能运行任务
-//要想删除一个正在运行的Task，必须先kill掉这个task，然后才能删除。
-
-#[derive(Debug)]
-pub struct RunTimeConfig {
-    pub env: Vec<String>,
-    pub args: Vec<String>,
-    pub ports: Vec<String>,
-}
-
-impl RunTimeConfig {
-    pub fn new(env: Vec<String>, args: Vec<String>, ports: Vec<String>) -> Self {
-        RunTimeConfig { env, args, ports }
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct NetworkConfig {
-    pub netns: String,
-    pub ip: String,
-    pub ports: Vec<String>,
+    netns: String,
+    ip: String,
+    ports: Vec<String>,
 }
 
 impl NetworkConfig {
     pub fn new(netns: String, ip: String, ports: Vec<String>) -> Self {
         NetworkConfig { netns, ip, ports }
+    }
+
+    pub fn get_netns(&self) -> String {
+        self.netns.clone()
+    }
+
+    pub fn get_ip(&self) -> String {
+        self.ip.clone()
+    }
+
+    pub fn get_address(&self) -> String {
+        format!(
+            "{}:{}",
+            self.ip.split('/').next().unwrap_or(""),
+            self.ports[0].split('/').next().unwrap_or("")
+        )
     }
 }
