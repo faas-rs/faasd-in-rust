@@ -20,7 +20,7 @@ use crate::spec::DEFAULT_NAMESPACE;
 
 type ImagesMap = Arc<RwLock<HashMap<String, ImageConfiguration>>>;
 lazy_static::lazy_static! {
-    static ref GLOBAL_NETNS_MAP: ImagesMap = Arc::new(RwLock::new(HashMap::new()));
+    static ref GLOBAL_IMAGE_MAP: ImagesMap = Arc::new(RwLock::new(HashMap::new()));
 }
 
 #[derive(Debug, Clone)]
@@ -38,7 +38,7 @@ impl ImageRuntimeConfig {
 
 impl Drop for ImageManager {
     fn drop(&mut self) {
-        let mut map = GLOBAL_NETNS_MAP.write().unwrap();
+        let mut map = GLOBAL_IMAGE_MAP.write().unwrap();
         map.clear();
     }
 }
@@ -334,13 +334,13 @@ impl ImageManager {
     }
 
     fn insert_image_config(image_name: &str, config: ImageConfiguration) -> Result<(), ImageError> {
-        let mut map = GLOBAL_NETNS_MAP.write().unwrap();
+        let mut map = GLOBAL_IMAGE_MAP.write().unwrap();
         map.insert(image_name.to_string(), config);
         Ok(())
     }
 
     pub fn get_image_config(image_name: &str) -> Result<ImageConfiguration, ImageError> {
-        let map = GLOBAL_NETNS_MAP.read().unwrap();
+        let map = GLOBAL_IMAGE_MAP.read().unwrap();
         if let Some(config) = map.get(image_name) {
             Ok(config.clone())
         } else {
@@ -352,7 +352,7 @@ impl ImageManager {
     }
 
     pub fn get_runtime_config(image_name: &str) -> Result<ImageRuntimeConfig, ImageError> {
-        let map = GLOBAL_NETNS_MAP.read().unwrap();
+        let map = GLOBAL_IMAGE_MAP.read().unwrap();
         if let Some(config) = map.get(image_name) {
             if let Some(config) = config.config() {
                 let env = config.env().clone().unwrap();
