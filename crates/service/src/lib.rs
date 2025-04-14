@@ -507,7 +507,7 @@ impl NetworkConfig {
         let last_part = self.netns
         .as_str()
         .split('/')
-        .last()?;
+        .next_back()?;
         // 按 '-' 分割最后一部分
         let parts: Vec<&str> = last_part.split('-').collect();
         // 确保有且仅有两个部分
@@ -546,10 +546,9 @@ impl CtrInstance {
         .unwrap()
         .insert(cid.clone(), CtrInstance { cid, service, image, ns });
         Ok(())
-        
     }
     pub async fn create_and_start_task (&self) -> Result<(),Err> {
-        let (pid,networkconfig) = self
+        let (_,networkconfig) = self
         .service
         .create_and_start_task(&self.cid, &self.ns, &self.image)
         .await?;

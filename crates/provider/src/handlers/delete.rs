@@ -1,9 +1,6 @@
 use crate::{
     consts,
-    handlers::{
-        function_get::get_function,
-        utils::{CustomError, map_service_error},
-    },
+    handlers::utils::{CustomError, map_service_error},
 };
 use actix_web::{HttpResponse, Responder, ResponseError, error, web};
 use serde::{Deserialize, Serialize};
