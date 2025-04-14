@@ -500,3 +500,21 @@ impl NetworkConfig {
         )
     }
 }
+
+pub struct CtrInstance  {
+    cid : String,
+    image: String,
+    ns : String,
+    net: Option<NetworkConfig>
+}
+impl CtrInstance {
+    pub async fn new (service: &Service,cid: String ,image: String, ns: String) -> Result<Self,Err>{
+        service.create_container(image.as_str(), cid.as_str(), ns.as_str())
+        .await?;
+        Ok(CtrInstance { cid, image, ns, net :None })
+    }
+    pub async fn create_and_start_task (&self, service: &Service) -> Result<(),Err> {
+        service.create_and_start_task(&self.cid, &self.ns, &self.image)
+        .await
+    }
+}
