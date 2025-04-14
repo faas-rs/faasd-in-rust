@@ -70,7 +70,7 @@ async fn deploy(service: &Arc<Service>, config: &FunctionDeployment) -> Result<(
     let client = service.client.as_ref();
     ImageManager::prepare_image(client, &config.image, &namespace, true)
         .await
-        .unwrap();
+        .map_err(CustomError::from)?;
     println!("Image '{}' validated", &config.image);
 
     service

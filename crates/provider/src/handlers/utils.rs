@@ -1,6 +1,7 @@
 use crate::handlers::function_get::FunctionError;
 use actix_web::{Error, HttpResponse, ResponseError};
 use derive_more::Display;
+use service::image_manager::ImageError;
 
 pub fn map_service_error(e: Box<dyn std::error::Error>) -> Error {
     eprintln!("Service error: {}", e);
@@ -18,6 +19,8 @@ pub enum CustomError {
     ActixError(actix_web::Error),
     #[display("FunctionError: {}", _0)]
     FunctionError(FunctionError),
+    #[display("ImageError: {}", _0)]
+    ImageError(ImageError),
 }
 
 impl ResponseError for CustomError {
@@ -42,6 +45,9 @@ impl ResponseError for CustomError {
             CustomError::FunctionError(err) => {
                 HttpResponse::InternalServerError().body(err.to_string())
             }
+            CustomError::ImageError(err) => {
+                HttpResponse::InternalServerError().body(err.to_string())
+            }
         }
     }
 }
@@ -61,5 +67,11 @@ impl From<tonic::Status> for CustomError {
 impl From<FunctionError> for CustomError {
     fn from(err: FunctionError) -> Self {
         CustomError::FunctionError(err)
+    }
+}
+
+impl From<ImageError> for CustomError {
+    fn from(err: ImageError) -> Self {
+        CustomError::ImageError(err)
     }
 }
