@@ -26,6 +26,7 @@ use std::{
     time::Duration,
 };
 use tokio::time::timeout;
+use tokio::sync::Mutex;
 
 // config.json,dockerhub密钥
 // const DOCKER_CONFIG_DIR: &str = "/var/lib/faasd/.docker/";
@@ -501,20 +502,43 @@ impl NetworkConfig {
     }
 }
 
+
+lazy_static::lazy_static! {
+    static ref CONTAINER_MAP: Arc<RwLock<HashMap<String,CtrInstance>>> = Arc::new(RwLock::new(HashMap::new()));
+}
+#[derive(Debug, Clone)]
 pub struct CtrInstance  {
     cid : String,
     image: String,
     ns : String,
+    service: Service,
     net: Option<NetworkConfig>
 }
 impl CtrInstance {
-    pub async fn new (service: &Service,cid: String ,image: String, ns: String) -> Result<Self,Err>{
+    pub async fn new (service: Service,cid: String ,image: String, ns: String) -> Result<(),Err>{
         service.create_container(image.as_str(), cid.as_str(), ns.as_str())
         .await?;
-        Ok(CtrInstance { cid, image, ns, net :None })
+        CONTAINER_MAP
+        .write()
+        .unwrap()
+        .insert(cid.clone(), CtrInstance { cid, service, image, ns, net :None });
+        return Ok(());
+        
     }
     pub async fn create_and_start_task (&self, service: &Service) -> Result<(),Err> {
         service.create_and_start_task(&self.cid, &self.ns, &self.image)
         .await
+    }
+}
+
+impl Drop for CtrInstance {
+    fn drop(&mut self) {
+        let self_arc = Arc::new(Mutex::new(self));
+        let self_clone = Arc::clone(&self_arc);
+        // 在异步环境中执行异步函数
+        tokio::spawn(async move {
+            self_clone
+            //.service.delete_task(&self.cid, ns)
+        });
     }
 }
