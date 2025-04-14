@@ -7,7 +7,7 @@ pub struct Function {
     pub image: String,
     pub pid: u32,
     pub replicas: i32,
-    pub ip: String,
+    pub address: String,
     pub labels: HashMap<String, String>,
     // pub annotations: HashMap<String, String>,
     // pub secrets: Vec<String>,

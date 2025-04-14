@@ -35,11 +35,10 @@ impl InvokeResolver {
         };
 
         //容器启动后的port?
-        let ip = function.ip.clone();
+        let address = function.address.clone();
         println!("function: {:?}", function);
-        //let port = 80;
 
-        let urlstr = format!("http://{}", ip);
+        let urlstr = format!("http://{}", address);
         match Url::parse(&urlstr) {
             Ok(url) => Ok(url),
             Err(e) => {
