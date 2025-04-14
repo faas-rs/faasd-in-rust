@@ -2,6 +2,7 @@ pub mod image_manager;
 pub mod spec;
 pub mod systemd;
 
+use cni::delete_cni_network;
 use containerd_client::{
     Client,
     services::v1::{
@@ -27,6 +28,7 @@ use std::{
 };
 use tokio::time::timeout;
 use tokio::sync::Mutex;
+use tokio::task;
 
 // config.json,dockerhub密钥
 // const DOCKER_CONFIG_DIR: &str = "/var/lib/faasd/.docker/";
@@ -36,11 +38,36 @@ lazy_static::lazy_static! {
     static ref GLOBAL_NETNS_MAP: NetnsMap = Arc::new(RwLock::new(HashMap::new()));
 }
 
+pub  fn save_network_config( cid: &str, net_conf: NetworkConfig) {
+    let mut map = GLOBAL_NETNS_MAP.write().unwrap();
+    map.insert(cid.to_string(), net_conf);
+}
+
+pub  fn get_network_config( cid: &str) -> Option<NetworkConfig> {
+    let map = GLOBAL_NETNS_MAP.read().unwrap();
+    map.get(cid).cloned()
+}
+
+pub  fn get_ip( cid: &str) -> Option<String> {
+    let map = GLOBAL_NETNS_MAP.read().unwrap();
+    map.get(cid).map(|net_conf| net_conf.get_ip())
+}
+
+pub fn get_address( cid: &str) -> Option<String> {
+    let map = GLOBAL_NETNS_MAP.read().unwrap();
+    map.get(cid).map(|net_conf| net_conf.get_address())
+}
+
+pub fn remove_netns_ip( cid: &str) {
+    let mut map = GLOBAL_NETNS_MAP.write().unwrap();
+    map.remove(cid);
+}
+
 type Err = Box<dyn std::error::Error>;
 
 pub struct Service {
     pub client: Arc<Client>,
-    netns_map: NetnsMap,
+    //netns_map: NetnsMap,
 }
 
 impl Service {
@@ -48,34 +75,11 @@ impl Service {
         let client = Client::from_path(socket_path).await.unwrap();
         Ok(Service {
             client: Arc::new(client),
-            netns_map: GLOBAL_NETNS_MAP.clone(),
+            //netns_map: GLOBAL_NETNS_MAP.clone(),
         })
     }
 
-    pub async fn save_network_config(&self, cid: &str, net_conf: NetworkConfig) {
-        let mut map = self.netns_map.write().unwrap();
-        map.insert(cid.to_string(), net_conf);
-    }
-
-    pub async fn get_network_config(&self, cid: &str) -> Option<NetworkConfig> {
-        let map = self.netns_map.read().unwrap();
-        map.get(cid).cloned()
-    }
-
-    pub async fn get_ip(&self, cid: &str) -> Option<String> {
-        let map = self.netns_map.read().unwrap();
-        map.get(cid).map(|net_conf| net_conf.get_ip())
-    }
-
-    pub async fn get_address(&self, cid: &str) -> Option<String> {
-        let map = self.netns_map.read().unwrap();
-        map.get(cid).map(|net_conf| net_conf.get_address())
-    }
-
-    pub async fn remove_netns_ip(&self, cid: &str) {
-        let mut map = self.netns_map.write().unwrap();
-        map.remove(cid);
-    }
+    
 
     async fn prepare_snapshot(&self, cid: &str, ns: &str, img_name: &str) -> Result<(), Err> {
         let parent_snapshot = self.get_parent_snapshot(img_name).await?;
@@ -191,7 +195,7 @@ impl Service {
                 .await
                 .expect("Failed to delete container");
             //todo 这里删除cni?
-            self.remove_netns_ip(cid).await;
+            remove_netns_ip(cid);
 
             println!("Container: {:?} deleted", cc);
         } else {
@@ -201,21 +205,21 @@ impl Service {
         Ok(())
     }
 
-    pub async fn create_and_start_task(
+    pub async fn create_and_start_task (
         &self,
         cid: &str,
         ns: &str,
         img_name: &str,
-    ) -> Result<(), Err> {
+    ) -> Result<(u32,NetworkConfig), Err> {
         let namespace = self.check_namespace(ns);
         let namespace = namespace.as_str();
-        self.create_task(cid, namespace, img_name).await?;
+        let result = self.create_task(cid, namespace, img_name).await?;
         self.start_task(cid, namespace).await?;
-        Ok(())
+        Ok(result)
     }
 
-    /// 返回任务的pid
-    async fn create_task(&self, cid: &str, ns: &str, img_name: &str) -> Result<u32, Err> {
+    /// 返回任务的pid and networkconfig
+    async fn create_task(&self, cid: &str, ns: &str, img_name: &str) -> Result<(u32,NetworkConfig), Err> {
         let mut sc = self.client.snapshots();
         let req = MountsRequest {
             snapshotter: "overlayfs".to_string(),
@@ -237,7 +241,7 @@ impl Service {
         let ports = ImageManager::get_runtime_config(img_name).unwrap().ports;
         let network_config = NetworkConfig::new(path, ip, ports);
         println!("create_cni_network ok");
-        self.save_network_config(cid, network_config.clone()).await;
+        //self.save_network_config(cid, network_config.clone()).await;
         println!("save_netns_ip ok, netconfig: {:?}", network_config);
         let mut tc = self.client.tasks();
         let req = CreateTaskRequest {
@@ -247,7 +251,7 @@ impl Service {
         };
         let resp = tc.create(with_namespace!(req, ns)).await?;
         let pid = resp.into_inner().pid;
-        Ok(pid)
+        Ok((pid,network_config))
     }
 
     async fn start_task(&self, cid: &str, ns: &str) -> Result<(), Err> {
@@ -500,45 +504,72 @@ impl NetworkConfig {
             self.ports[0].split('/').next().unwrap_or("")
         )
     }
+    pub fn extract_ns_cid(&self) -> Option<(&str, &str)> {
+        let last_part = self.netns
+        .as_str()
+        .split('/')
+        .last()?;
+        // 按 '-' 分割最后一部分
+        let parts: Vec<&str> = last_part.split('-').collect();
+        // 确保有且仅有两个部分
+        if parts.len() == 2 {
+            Some((parts[0], parts[1]))
+        } else {
+            None
+        }
+    }
+}
+impl Drop for NetworkConfig {
+    fn drop(&mut self) {
+        let (ns,cid) = self.extract_ns_cid().unwrap();
+        delete_cni_network(ns, cid);
+    }
 }
 
 
 lazy_static::lazy_static! {
-    static ref CONTAINER_MAP: Arc<RwLock<HashMap<String,CtrInstance>>> = Arc::new(RwLock::new(HashMap::new()));
+    pub static ref CONTAINER_MAP: Arc<RwLock<HashMap<String,CtrInstance>>> = Arc::new(RwLock::new(HashMap::new()));
 }
-#[derive(Debug, Clone)]
+
 pub struct CtrInstance  {
     cid : String,
     image: String,
     ns : String,
-    service: Service,
-    net: Option<NetworkConfig>
+    service: Arc<Service>,
+    //net: Option<NetworkConfig>
 }
 impl CtrInstance {
-    pub async fn new (service: Service,cid: String ,image: String, ns: String) -> Result<(),Err>{
+    pub async fn new (service: Arc<Service>,cid: String ,image: String, ns: String) -> Result<(),Err>{
         service.create_container(image.as_str(), cid.as_str(), ns.as_str())
         .await?;
         CONTAINER_MAP
         .write()
         .unwrap()
-        .insert(cid.clone(), CtrInstance { cid, service, image, ns, net :None });
+        .insert(cid.clone(), CtrInstance { cid, service, image, ns });
         return Ok(());
         
     }
-    pub async fn create_and_start_task (&self, service: &Service) -> Result<(),Err> {
-        service.create_and_start_task(&self.cid, &self.ns, &self.image)
-        .await
+    pub async fn create_and_start_task (&self) -> Result<(),Err> {
+        let (pid,networkconfig) = self
+        .service
+        .create_and_start_task(&self.cid, &self.ns, &self.image)
+        .await?;
+        save_network_config(&self.cid,networkconfig.clone() );
+        Ok(())
     }
 }
 
 impl Drop for CtrInstance {
     fn drop(&mut self) {
-        let self_arc = Arc::new(Mutex::new(self));
-        let self_clone = Arc::clone(&self_arc);
-        // 在异步环境中执行异步函数
-        tokio::spawn(async move {
-            self_clone
-            //.service.delete_task(&self.cid, ns)
+        remove_netns_ip(&self.cid);
+        task::block_in_place(|| {
+            let fut = async {
+                dbg!(self.service.delete_task(&self.cid, &self.ns).await.unwrap());
+                dbg!(self.service.remove_container(&self.cid, &self.ns).await.unwrap());
+            };
+            tokio::runtime::Handle::current().block_on(fut)
         });
+        
+        //GLOBAL_NETNS_MAP.
     }
 }

@@ -3,6 +3,7 @@ use crate::handlers::function_list::Function;
 use actix_web::cookie::time::Duration;
 use std::{collections::HashMap, time::UNIX_EPOCH};
 use thiserror::Error;
+use service;
 
 const ANNOTATION_LABEL_PREFIX: &str = "com.openfaas.annotations.";
 
@@ -24,7 +25,7 @@ pub async fn get_function(
     namespace: &str,
 ) -> Result<Function, FunctionError> {
     let cid = function_name;
-    let address = client.get_address(cid).await.unwrap_or_default();
+    let address = service::get_address(cid).unwrap_or_default();
 
     let container = client
         .load_container(cid, namespace)

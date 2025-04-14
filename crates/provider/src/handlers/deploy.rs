@@ -4,8 +4,7 @@ use crate::{
     types::function_deployment::{DeployFunctionInfo, FunctionDeployment},
 };
 use actix_web::{HttpResponse, Responder, web};
-
-use service::{Service, image_manager::ImageManager};
+use service::{Service, image_manager::ImageManager,CtrInstance, CONTAINER_MAP};
 use std::sync::Arc;
 
 pub async fn deploy_handler(
@@ -72,18 +71,35 @@ async fn deploy(service: &Arc<Service>, config: &FunctionDeployment) -> Result<(
         .await
         .unwrap();
     println!("Image '{}' validated", &config.image);
-
-    service
+    let ns : String = match &config.namespace {
+        Some(ns)=>ns.clone(),
+        None=> String::from("")
+    };
+    CtrInstance::new(service.clone(),config.service.clone(),config.image.clone(),ns)
+    .await
+    .map_err(|e| CustomError::OtherError(format!("failed to create container:{}", e)))?;
+    /*service
         .create_container(&config.image, &config.service, &namespace)
         .await
-        .map_err(|e| CustomError::OtherError(format!("failed to create container:{}", e)))?;
+        .map_err(|e| CustomError::OtherError(format!("failed to create container:{}", e)))?;*/
 
     println!(
         "Container {} created using image {} in namespace {}",
         &config.service, &config.image, namespace
     );
-
-    service
+    CONTAINER_MAP
+    .read()
+    .unwrap()
+    .get(&config.service)
+    .unwrap()
+    .create_and_start_task().await
+    .map_err(|e| {
+        CustomError::OtherError(format!(
+            "failed to start task for container {},{}",
+            &config.service, e
+        ))
+    })?;
+    /*service
         .create_and_start_task(&config.service, &namespace, &config.image)
         .await
         .map_err(|e| {
@@ -91,7 +107,7 @@ async fn deploy(service: &Arc<Service>, config: &FunctionDeployment) -> Result<(
                 "failed to start task for container {},{}",
                 &config.service, e
             ))
-        })?;
+        })?;*/
     println!(
         "Task for container {} was created successfully",
         &config.service
