@@ -5,7 +5,7 @@ use crate::{
         utils::{CustomError, map_service_error},
     },
 };
-use actix_web::{HttpResponse, Responder, error, web};
+use actix_web::{HttpResponse, Responder, ResponseError, error, web};
 use serde::{Deserialize, Serialize};
 use service::Service;
 use std::sync::Arc;
@@ -24,10 +24,7 @@ pub async fn delete_handler(
         Ok(()) => {
             HttpResponse::Ok().body(format!("function {} deleted successfully", function_name))
         }
-        Err(e) => HttpResponse::InternalServerError().body(format!(
-            "failed to delete function {} in namespace {} because {}",
-            function_name, namespace, e
-        )),
+        Err(e) => e.error_response(),
     }
 }
 
@@ -46,7 +43,7 @@ async fn delete(
     let function = get_function(service, function_name, namespace).await?;
     if function.replicas != 0 {
         println!("  delete_cni_network ing {:?}", function.replicas);
-        cni::cni_network::delete_cni_network(namespace, function_name);
+        cni::delete_cni_network(namespace, function_name);
     } else {
         println!("  function.replicas {:?}", function.replicas);
     }

@@ -1,11 +1,11 @@
 use crate::{
     consts,
-    handlers::utils::{CustomError, map_service_error},
+    handlers::utils::CustomError,
     types::function_deployment::{DeployFunctionInfo, FunctionDeployment},
 };
 use actix_web::{HttpResponse, Responder, web};
 
-use service::Service;
+use service::{Service, image_manager::ImageManager};
 use std::sync::Arc;
 
 pub async fn deploy_handler(
@@ -66,10 +66,11 @@ async fn deploy(service: &Arc<Service>, config: &FunctionDeployment) -> Result<(
         ));
     }
 
-    service
-        .prepare_image(&config.image, &namespace, true)
+    //todo 这里暂时将client设为pub
+    let client = service.client.as_ref();
+    ImageManager::prepare_image(client, &config.image, &namespace, true)
         .await
-        .map_err(map_service_error)?;
+        .unwrap();
     println!("Image '{}' validated", &config.image);
 
     service
@@ -83,7 +84,7 @@ async fn deploy(service: &Arc<Service>, config: &FunctionDeployment) -> Result<(
     );
 
     service
-        .create_and_start_task(&config.service, &namespace)
+        .create_and_start_task(&config.service, &namespace, &config.image)
         .await
         .map_err(|e| {
             CustomError::OtherError(format!(
