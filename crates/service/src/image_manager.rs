@@ -249,7 +249,9 @@ impl ImageManager {
         data: &[u8],
         ns: &str,
     ) -> Result<Option<ImageConfiguration>, ImageError> {
-        let image_index: ImageIndex = ::serde_json::from_slice(data).unwrap();
+        let image_index: ImageIndex = ::serde_json::from_slice(data).map_err(|e| {
+            ImageError::DeserializationFailed(format!("Failed to parse JSON: {}", e))
+        })?;
         let img_manifest_dscr = image_index
             .manifests()
             .iter()
