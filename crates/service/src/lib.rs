@@ -27,7 +27,6 @@ use std::{
     time::Duration,
 };
 use tokio::time::timeout;
-use tokio::sync::Mutex;
 use tokio::task;
 
 // config.json,dockerhub密钥
@@ -546,7 +545,7 @@ impl CtrInstance {
         .write()
         .unwrap()
         .insert(cid.clone(), CtrInstance { cid, service, image, ns });
-        return Ok(());
+        Ok(())
         
     }
     pub async fn create_and_start_task (&self) -> Result<(),Err> {
