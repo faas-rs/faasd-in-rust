@@ -50,6 +50,7 @@ pub enum ImageError {
     ImageConfigurationNotFound(String),
     ReadContentFailed(String),
     UnexpectedMediaType,
+    DeserializationFailed(String),
     #[allow(dead_code)]
     OtherError,
 }
@@ -65,6 +66,9 @@ impl std::fmt::Display for ImageError {
             ImageError::ReadContentFailed(msg) => write!(f, "Read content failed: {}", msg),
             ImageError::UnexpectedMediaType => {
                 write!(f, "Unexpected media type")
+            }
+            ImageError::DeserializationFailed(msg) => {
+                write!(f, "Deserialization failed: {}", msg)
             }
             ImageError::OtherError => write!(f, "Other error happened"),
         }
@@ -301,7 +305,15 @@ impl ImageManager {
         data: &[u8],
         ns: &str,
     ) -> Result<Option<ImageConfiguration>, ImageError> {
-        let img_manifest: ImageManifest = ::serde_json::from_slice(data).unwrap();
+        let img_manifest: ImageManifest = match ::serde_json::from_slice(data) {
+            Ok(manifest) => manifest,
+            Err(e) => {
+                return Err(ImageError::DeserializationFailed(format!(
+                    "Failed to deserialize image manifest: {}",
+                    e
+                )));
+            }
+        };
         let img_manifest_dscr = img_manifest.config();
 
         let req = ReadContentRequest {
