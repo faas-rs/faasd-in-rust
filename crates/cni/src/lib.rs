@@ -78,7 +78,6 @@ fn get_path(netns: &str) -> String {
     format!("/var/run/netns/{}", netns)
 }
 
-
 //TODO: 创建网络和删除网络的错误处理
 pub fn create_cni_network(cid: String, ns: String) -> Result<(String, String), Err> {
     // let netid = format!("{}-{}", cid, pid);

@@ -4,7 +4,7 @@ use crate::{
 };
 use actix_web::{HttpResponse, Responder, ResponseError, error, web};
 use serde::{Deserialize, Serialize};
-use service::{Service,CONTAINER_MAP};
+use service::{CONTAINER_MAP, Service};
 use std::sync::Arc;
 
 pub async fn delete_handler(
@@ -37,10 +37,7 @@ async fn delete(
             namespace
         ))));
     }
-    CONTAINER_MAP
-    .write()
-    .unwrap()
-    .remove(function_name);
+    CONTAINER_MAP.write().unwrap().remove(function_name);
     /*let function = get_function(service, function_name, namespace).await?;
     if function.replicas != 0 {
         println!("  delete_cni_network ing {:?}", function.replicas);

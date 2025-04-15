@@ -11,13 +11,11 @@ impl Systemd {
             .arg(&unit)
             .output()?;
         if !output.status.success() {
-            return Err(Box::new(std::io::Error::other(
-                format!(
-                    "Failed to enable unit {}: {}",
-                    unit,
-                    String::from_utf8_lossy(&output.stderr)
-                ),
-            )));
+            return Err(Box::new(std::io::Error::other(format!(
+                "Failed to enable unit {}: {}",
+                unit,
+                String::from_utf8_lossy(&output.stderr)
+            ))));
         }
         Ok(())
     }
@@ -28,13 +26,11 @@ impl Systemd {
             .arg(&unit)
             .output()?;
         if !output.status.success() {
-            return Err(Box::new(std::io::Error::other(
-                format!(
-                    "Failed to start unit {}: {}",
-                    unit,
-                    String::from_utf8_lossy(&output.stderr)
-                ),
-            )));
+            return Err(Box::new(std::io::Error::other(format!(
+                "Failed to start unit {}: {}",
+                unit,
+                String::from_utf8_lossy(&output.stderr)
+            ))));
         }
         Ok(())
     }
@@ -44,12 +40,10 @@ impl Systemd {
             .arg("daemon-reload")
             .output()?;
         if !output.status.success() {
-            return Err(Box::new(std::io::Error::other(
-                format!(
-                    "Failed to reload systemd daemon: {}",
-                    String::from_utf8_lossy(&output.stderr)
-                ),
-            )));
+            return Err(Box::new(std::io::Error::other(format!(
+                "Failed to reload systemd daemon: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ))));
         }
         Ok(())
     }
