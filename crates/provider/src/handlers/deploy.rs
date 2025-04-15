@@ -4,7 +4,9 @@ use crate::{
     types::function_deployment::{DeployFunctionInfo, FunctionDeployment},
 };
 use actix_web::{HttpResponse, Responder, web};
+
 use service::{CONTAINER_MAP, CtrInstance, Service, image_manager::ImageManager};
+
 use std::sync::Arc;
 
 pub async fn deploy_handler(
@@ -50,7 +52,7 @@ async fn deploy(service: &Arc<Service>, config: &FunctionDeployment) -> Result<(
     //         namespace
     //     ))));
     // }
-    println!(
+    log::info!(
         "Namespace '{}' validated.",
         config.namespace.clone().unwrap()
     );
@@ -69,8 +71,10 @@ async fn deploy(service: &Arc<Service>, config: &FunctionDeployment) -> Result<(
     //todo 这里暂时将client设为pub
     let client = service.client.as_ref();
     ImageManager::prepare_image(client, &config.image, &namespace, true)
-        .await
-        .unwrap();
+        .await.map_err(CustomError::from)?;
+    log::info!("Image '{}' validated ,", &config.image);
+
+        
     println!("Image '{}' validated", &config.image);
     let ns: String = match &config.namespace {
         Some(ns) => ns.clone(),
@@ -89,10 +93,14 @@ async fn deploy(service: &Arc<Service>, config: &FunctionDeployment) -> Result<(
     .await
     .map_err(|e| CustomError::OtherError(format!("failed to create container:{}", e)))?;*/
 
-    println!(
+
+    log::info!(
         "Container {} created using image {} in namespace {}",
-        &config.service, &config.image, namespace
+        &config.service,
+        &config.image,
+        namespace
     );
+
 
     CONTAINER_MAP
         .read()
@@ -107,6 +115,7 @@ async fn deploy(service: &Arc<Service>, config: &FunctionDeployment) -> Result<(
                 &config.service, e
             ))
         })?;
+
     /*service
     .create_and_start_task(&config.service, &namespace, &config.image)
     .await
@@ -116,7 +125,8 @@ async fn deploy(service: &Arc<Service>, config: &FunctionDeployment) -> Result<(
             &config.service, e
         ))
     })?;*/
-    println!(
+    
+    log::info!(
         "Task for container {} was created successfully",
         &config.service
     );

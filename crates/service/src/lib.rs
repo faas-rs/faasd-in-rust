@@ -2,7 +2,9 @@ pub mod image_manager;
 pub mod spec;
 pub mod systemd;
 
+
 use cni::delete_cni_network;
+
 use containerd_client::{
     Client,
     services::v1::{
@@ -66,7 +68,9 @@ type Err = Box<dyn std::error::Error>;
 
 pub struct Service {
     pub client: Arc<Client>,
+
     //netns_map: NetnsMap,
+
 }
 
 impl Service {
@@ -77,6 +81,7 @@ impl Service {
             //netns_map: GLOBAL_NETNS_MAP.clone(),
         })
     }
+
 
     async fn prepare_snapshot(&self, cid: &str, ns: &str, img_name: &str) -> Result<(), Err> {
         let parent_snapshot = self.get_parent_snapshot(img_name).await?;
@@ -148,11 +153,11 @@ impl Service {
         };
         let mut cc = self.client.containers();
 
-        let responce = cc
+        let response = cc
             .list(with_namespace!(request, namespace))
             .await?
             .into_inner();
-        let container = responce
+        let container = response
             .containers
             .iter()
             .find(|container| container.id == cid);
@@ -163,15 +168,15 @@ impl Service {
             let request = ListTasksRequest {
                 filter: format!("container=={}", cid),
             };
-            let responce = tc
+            let response = tc
                 .list(with_namespace!(request, namespace))
                 .await?
                 .into_inner();
-            println!("Tasks: {:?}", responce.tasks);
+            log::info!("Tasks: {:?}", response.tasks);
             drop(tc);
 
-            if let Some(task) = responce.tasks.iter().find(|task| task.id == container.id) {
-                println!("Task found: {}, Status: {}", task.id, task.status);
+            if let Some(task) = response.tasks.iter().find(|task| task.id == container.id) {
+                log::info!("Task found: {}, Status: {}", task.id, task.status);
                 // TASK_UNKNOWN (0) — 未知状态
                 // TASK_CREATED (1) — 任务已创建
                 // TASK_RUNNING (2) — 任务正在运行
@@ -192,9 +197,11 @@ impl Service {
                 .await
                 .expect("Failed to delete container");
             //todo 这里删除cni?
+
             remove_netns_ip(cid);
 
-            println!("Container: {:?} deleted", cc);
+
+            log::info!("Container: {:?} deleted", cc);
         } else {
             todo!("Container not found");
         }
@@ -207,13 +214,16 @@ impl Service {
         cid: &str,
         ns: &str,
         img_name: &str,
+
     ) -> Result<(u32, NetworkConfig), Err> {
         let namespace = self.check_namespace(ns);
         let namespace = namespace.as_str();
         let result = self.create_task(cid, namespace, img_name).await?;
+
         self.start_task(cid, namespace).await?;
         Ok(result)
     }
+
 
     /// 返回任务的pid and networkconfig
     async fn create_task(
@@ -222,6 +232,7 @@ impl Service {
         ns: &str,
         img_name: &str,
     ) -> Result<(u32, NetworkConfig), Err> {
+
         let mut sc = self.client.snapshots();
         let req = MountsRequest {
             snapshotter: "overlayfs".to_string(),
@@ -234,17 +245,19 @@ impl Service {
             .into_inner()
             .mounts;
 
-        println!("mounts ok");
+
+        log::info!("mounts ok");
         drop(sc);
-        println!("drop sc ok");
+        log::info!("drop sc ok");
         let _ = cni::init_net_work();
-        println!("init_net_work ok");
+        log::info!("init_net_work ok");
         let (ip, path) = cni::create_cni_network(cid.to_string(), ns.to_string())?;
         let ports = ImageManager::get_runtime_config(img_name).unwrap().ports;
         let network_config = NetworkConfig::new(path, ip, ports);
-        println!("create_cni_network ok");
-        //self.save_network_config(cid, network_config.clone()).await;
-        println!("save_netns_ip ok, netconfig: {:?}", network_config);
+        log::info!("create_cni_network ok");
+        self.save_network_config(cid, network_config.clone()).await;
+        log::info!("save_netns_ip ok, netconfig: {:?}", network_config);
+
         let mut tc = self.client.tasks();
         let req = CreateTaskRequest {
             container_id: cid.to_string(),
@@ -262,7 +275,7 @@ impl Service {
             ..Default::default()
         };
         let _resp = self.client.tasks().start(with_namespace!(req, ns)).await?;
-        println!("Task: {:?} started", cid);
+        log::info!("Task: {:?} started", cid);
 
         Ok(())
     }
@@ -306,7 +319,7 @@ impl Service {
             Ok::<(), Err>(())
         })
         .await;
-        println!("  after wait");
+        log::info!("after wait");
 
         let kill_request = KillRequest {
             container_id: cid.to_string(),
@@ -331,17 +344,17 @@ impl Service {
                 // println!("Task: {:?} deleted", cid);
                 match c.delete(with_namespace!(req, namespace)).await {
                     Ok(_) => {
-                        println!("Task: {:?} deleted", cid);
+                        log::info!("Task: {:?} deleted", cid);
                         Ok(())
                     }
                     Err(e) => {
-                        eprintln!("Failed to delete task: {}", e);
+                        log::error!("Failed to delete task: {}", e);
                         Err(e.into())
                     }
                 }
             }
             Ok(Err(e)) => {
-                eprintln!("Wait task failed: {}", e);
+                log::error!("Wait task failed: {}", e);
                 Err(e)
             }
             Err(_) => {
@@ -353,11 +366,11 @@ impl Service {
                 };
                 match c.kill(with_namespace!(kill_request, namespace)).await {
                     Ok(_) => {
-                        println!("Task: {:?} force killed", cid);
+                        log::info!("Task: {:?} force killed", cid);
                         Ok(())
                     }
                     Err(e) => {
-                        eprintln!("Failed to force kill task: {}", e);
+                        log::error!("Failed to force kill task: {}", e);
                         Err(e.into())
                     }
                 }
@@ -506,6 +519,7 @@ impl NetworkConfig {
             self.ports[0].split('/').next().unwrap_or("")
         )
     }
+
     pub fn extract_ns_cid(&self) -> Option<(&str, &str)> {
         let last_part = self.netns.as_str().split('/').next_back()?;
         // 按 '-' 分割最后一部分
@@ -586,4 +600,5 @@ impl Drop for CtrInstance {
 
         //GLOBAL_NETNS_MAP.
     }
+
 }

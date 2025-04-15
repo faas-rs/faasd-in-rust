@@ -40,10 +40,13 @@ async fn delete(
     CONTAINER_MAP.write().unwrap().remove(function_name);
     /*let function = get_function(service, function_name, namespace).await?;
     if function.replicas != 0 {
-        println!("  delete_cni_network ing {:?}", function.replicas);
+
+        log::info!("function.replicas: {:?}", function.replicas);
         cni::delete_cni_network(namespace, function_name);
+        log::info!("delete_cni_network ok");
+
     } else {
-        println!("  function.replicas {:?}", function.replicas);
+        log::info!("function.replicas: {:?}", function.replicas);
     }
     service
         .remove_container(function_name, namespace)

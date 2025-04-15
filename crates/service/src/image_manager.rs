@@ -50,6 +50,7 @@ pub enum ImageError {
     ImageConfigurationNotFound(String),
     ReadContentFailed(String),
     UnexpectedMediaType,
+    DeserializationFailed(String),
     #[allow(dead_code)]
     OtherError,
 }
@@ -65,6 +66,9 @@ impl std::fmt::Display for ImageError {
             ImageError::ReadContentFailed(msg) => write!(f, "Read content failed: {}", msg),
             ImageError::UnexpectedMediaType => {
                 write!(f, "Unexpected media type")
+            }
+            ImageError::DeserializationFailed(msg) => {
+                write!(f, "Deserialization failed: {}", msg)
             }
             ImageError::OtherError => write!(f, "Other error happened"),
         }
@@ -106,7 +110,7 @@ impl ImageManager {
                 Self::pull_image(client, image_name, ns).await?;
             }
         }
-        Ok(())
+        Self::save_img_config(client, image_name, ns).await
     }
 
     pub async fn pull_image(client: &Client, image_name: &str, ns: &str) -> Result<(), ImageError> {
@@ -156,7 +160,8 @@ impl ImageManager {
             )));
         }
 
-        Self::save_img_config(client, image_name, ns.as_str()).await
+        Ok(())
+        // Self::save_img_config(client, image_name, ns.as_str()).await
     }
 
     pub async fn save_img_config(
@@ -231,7 +236,7 @@ impl ImageManager {
         };
         if img_config.is_none() {
             return Err(ImageError::ImageConfigurationNotFound(format!(
-                "Image configuration not found for image {}",
+                "save_img_config: Image configuration not found for image {}",
                 img_name
             )));
         }
@@ -244,7 +249,9 @@ impl ImageManager {
         data: &[u8],
         ns: &str,
     ) -> Result<Option<ImageConfiguration>, ImageError> {
-        let image_index: ImageIndex = ::serde_json::from_slice(data).unwrap();
+        let image_index: ImageIndex = ::serde_json::from_slice(data).map_err(|e| {
+            ImageError::DeserializationFailed(format!("Failed to parse JSON: {}", e))
+        })?;
         let img_manifest_dscr = image_index
             .manifests()
             .iter()
@@ -300,7 +307,15 @@ impl ImageManager {
         data: &[u8],
         ns: &str,
     ) -> Result<Option<ImageConfiguration>, ImageError> {
-        let img_manifest: ImageManifest = ::serde_json::from_slice(data).unwrap();
+        let img_manifest: ImageManifest = match ::serde_json::from_slice(data) {
+            Ok(manifest) => manifest,
+            Err(e) => {
+                return Err(ImageError::DeserializationFailed(format!(
+                    "Failed to deserialize image manifest: {}",
+                    e
+                )));
+            }
+        };
         let img_manifest_dscr = img_manifest.config();
 
         let req = ReadContentRequest {
@@ -345,7 +360,7 @@ impl ImageManager {
             Ok(config.clone())
         } else {
             Err(ImageError::ImageConfigurationNotFound(format!(
-                "Image configuration not found for image {}",
+                "get_image_config: Image configuration not found for image {}",
                 image_name
             )))
         }
@@ -355,9 +370,18 @@ impl ImageManager {
         let map = GLOBAL_IMAGE_MAP.read().unwrap();
         if let Some(config) = map.get(image_name) {
             if let Some(config) = config.config() {
-                let env = config.env().clone().unwrap();
-                let args = config.cmd().clone().unwrap();
-                let ports = config.exposed_ports().clone().unwrap();
+                let env = config
+                    .env()
+                    .clone()
+                    .expect("Failed to get environment variables");
+                let args = config
+                    .cmd()
+                    .clone()
+                    .expect("Failed to get command arguments");
+                let ports = config
+                    .exposed_ports()
+                    .clone()
+                    .expect("Failed to get exposed ports");
                 Ok(ImageRuntimeConfig::new(env, args, ports))
             } else {
                 Err(ImageError::ImageConfigurationNotFound(format!(
@@ -367,7 +391,7 @@ impl ImageManager {
             }
         } else {
             Err(ImageError::ImageConfigurationNotFound(format!(
-                "Image configuration not found for image {}",
+                "get_runtime_config: Image configuration not found for image {}",
                 image_name
             )))
         }
