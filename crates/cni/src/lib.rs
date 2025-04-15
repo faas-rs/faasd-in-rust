@@ -78,6 +78,10 @@ fn get_path(netns: &str) -> String {
     format!("/var/run/netns/{}", netns)
 }
 
+fn get_cnitool() -> String {
+    format!("CNI_PATH={} {}", CNI_BIN_DIR.as_str(), CNI_TOOL.as_str())
+}
+
 //TODO: 创建网络和删除网络的错误处理
 pub fn create_cni_network(cid: String, ns: String) -> Result<(String, String), Err> {
     // let netid = format!("{}-{}", cid, pid);
@@ -95,13 +99,10 @@ pub fn create_cni_network(cid: String, ns: String) -> Result<(String, String), E
         return Err(Box::new(Error));
     }
 
-    let bin = CNI_BIN_DIR.as_str();
-    let cnitool = CNI_TOOL.as_str();
-    let output = std::process::Command::new(cnitool)
+    let output = std::process::Command::new(get_cnitool())
         .arg("add")
         .arg("faasrs-cni-bridge")
         .arg(&path)
-        .env("CNI_PATH", bin)
         .output();
 
     match output {
@@ -137,15 +138,17 @@ pub fn create_cni_network(cid: String, ns: String) -> Result<(String, String), E
 pub fn delete_cni_network(ns: &str, cid: &str) {
     let netns = get_netns(ns, cid);
     let path = get_path(&netns);
-    let bin = CNI_BIN_DIR.as_str();
-    let cnitool = CNI_TOOL.as_str();
 
-    let _output_del = std::process::Command::new(cnitool)
+    let output = std::process::Command::new(get_cnitool())
         .arg("del")
         .arg("faasrs-cni-bridge")
         .arg(&path)
-        .env("CNI_PATH", bin)
         .output();
+
+    if let Err(e) = output {
+        eprintln!("Failed to execute delete command: {}", e);
+    }
+
     let _output = std::process::Command::new("ip")
         .arg("netns")
         .arg("delete")
