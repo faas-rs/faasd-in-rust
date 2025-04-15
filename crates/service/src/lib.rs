@@ -538,6 +538,7 @@ pub struct CtrInstance  {
     //net: Option<NetworkConfig>
 }
 impl CtrInstance {
+    #[allow(clippy::new_ret_no_self)]
     pub async fn new (service: Arc<Service>,cid: String ,image: String, ns: String) -> Result<(),Err>{
         service.create_container(image.as_str(), cid.as_str(), ns.as_str())
         .await?;
