@@ -33,11 +33,9 @@ impl InvokeResolver {
                 return Err(ErrorInternalServerError("Failed to get function"));
             }
         };
+        log::info!("Function:{:?}", function);
 
-        //容器启动后的port?
         let address = function.address.clone();
-        println!("function: {:?}", function);
-
         let urlstr = format!("http://{}", address);
         match Url::parse(&urlstr) {
             Ok(url) => Ok(url),

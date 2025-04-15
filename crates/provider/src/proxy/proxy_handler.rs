@@ -19,7 +19,7 @@ pub async fn proxy_handler(
         .expect("empty proxy handler resolver, cannot be nil");
 
     let proxy_client = new_proxy_client_from_config(config.as_ref()).await;
-    println!("proxy_client : {:?}", proxy_client);
+    log::info!("proxy_client : {:?}", proxy_client);
 
     match *req.method() {
         Method::POST

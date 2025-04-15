@@ -50,7 +50,7 @@ async fn deploy(service: &Arc<Service>, config: &FunctionDeployment) -> Result<(
     //         namespace
     //     ))));
     // }
-    println!(
+    log::info!(
         "Namespace '{}' validated.",
         config.namespace.clone().unwrap()
     );
@@ -71,16 +71,18 @@ async fn deploy(service: &Arc<Service>, config: &FunctionDeployment) -> Result<(
     ImageManager::prepare_image(client, &config.image, &namespace, true)
         .await
         .map_err(CustomError::from)?;
-    println!("Image '{}' validated", &config.image);
+    log::info!("Image '{}' validated ,", &config.image);
 
     service
         .create_container(&config.image, &config.service, &namespace)
         .await
         .map_err(|e| CustomError::OtherError(format!("failed to create container:{}", e)))?;
 
-    println!(
+    log::info!(
         "Container {} created using image {} in namespace {}",
-        &config.service, &config.image, namespace
+        &config.service,
+        &config.image,
+        namespace
     );
 
     service
@@ -92,7 +94,7 @@ async fn deploy(service: &Arc<Service>, config: &FunctionDeployment) -> Result<(
                 &config.service, e
             ))
         })?;
-    println!(
+    log::info!(
         "Task for container {} was created successfully",
         &config.service
     );

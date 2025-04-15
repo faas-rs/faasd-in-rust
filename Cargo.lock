@@ -848,6 +848,8 @@ version = "0.1.0"
 dependencies = [
  "actix-web",
  "dotenv",
+ "env_logger",
+ "log",
  "my-workspace-hack",
  "provider",
  "serde 1.0.217",

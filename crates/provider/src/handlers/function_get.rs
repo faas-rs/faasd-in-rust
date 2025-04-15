@@ -64,7 +64,7 @@ pub async fn get_function(
             }
         }
         Err(e) => {
-            eprintln!("Failed to get task: {}", e);
+            log::error!("Failed to get task: {}", e);
             replicas = 0;
         }
     }

@@ -1,16 +1,17 @@
 use std::sync::Arc;
 
 use actix_web::{App, HttpServer, web};
-use service::Service;
 use provider::{
     handlers::{delete::delete_handler, deploy::deploy_handler, invoke_resolver::InvokeResolver},
     proxy::proxy_handler::proxy_handler,
     types::config::FaaSConfig,
 };
+use service::Service;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     dotenv::dotenv().ok();
+    env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
     let service = Arc::new(
         Service::new("/run/containerd/containerd.sock")
             .await
@@ -20,7 +21,7 @@ async fn main() -> std::io::Result<()> {
     let resolver = Some(InvokeResolver::new(service.clone()).await);
     let faas_config = FaaSConfig::new();
 
-    println!("I'm running!");
+    log::info!("I'm running!");
 
     let server = HttpServer::new(move || {
         App::new()
@@ -34,7 +35,7 @@ async fn main() -> std::io::Result<()> {
     })
     .bind("0.0.0.0:8090")?;
 
-    println!("0.0.0.0:8090");
+    log::info!("Running on 0.0.0.0:8090...");
 
     server.run().await
 }
@@ -49,9 +50,9 @@ mod tests {
         let bin = std::env::var("CNI_BIN_DIR").unwrap_or_else(|_| "Not set".to_string());
         let conf = std::env::var("CNI_CONF_DIR").unwrap_or_else(|_| "Not set".to_string());
         let tool = std::env::var("CNI_TOOL").unwrap_or_else(|_| "Not set".to_string());
-        println!("CNI_BIN_DIR: {bin}");
-        println!("CNI_CONF_DIR: {conf}");
-        println!("CNI_TOOL: {tool}");
+        log::debug!("CNI_BIN_DIR: {bin}");
+        log::debug!("CNI_CONF_DIR: {conf}");
+        log::debug!("CNI_TOOL: {tool}");
         // for (key, value) in &result {
         //     println!("{}={}", key, value);
         // }
