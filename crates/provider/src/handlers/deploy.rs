@@ -36,6 +36,7 @@ pub async fn deploy_handler(
     }
 }
 
+#[allow(clippy::await_holding_lock)]
 async fn deploy(service: &Arc<Service>, config: &FunctionDeployment) -> Result<(), CustomError> {
     // let namespaces = service
     //     .list_namespaces()
@@ -87,7 +88,7 @@ async fn deploy(service: &Arc<Service>, config: &FunctionDeployment) -> Result<(
         "Container {} created using image {} in namespace {}",
         &config.service, &config.image, namespace
     );
-    #[allow(clippy::await_holding_lock)]
+    
     CONTAINER_MAP
     .read()
     .unwrap()
