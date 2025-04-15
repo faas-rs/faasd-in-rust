@@ -1,6 +1,7 @@
 type Err = Box<dyn std::error::Error>;
 
 use lazy_static::lazy_static;
+use netns_rs::{NetNs, get_from_path};
 use serde_json::Value;
 use std::{
     fmt::Error,
@@ -85,15 +86,13 @@ pub fn create_cni_network(cid: String, ns: String) -> Result<(String, String), E
     let path = get_path(netns.as_str());
     let mut ip = String::new();
 
-    let output = std::process::Command::new("ip")
-        .arg("netns")
-        .arg("add")
-        .arg(&netns)
-        .output()?;
-
-    if !output.status.success() {
-        return Err(Box::new(Error));
-    }
+    NetNs::new(&netns)
+        .map(|ns| {
+            log::info!("Creating namespace: {}", ns);
+        })
+        .unwrap_or_else(|_| {
+            log::error!("Failed to create namespace: {}", netns);
+        });
 
     let bin = CNI_BIN_DIR.as_str();
     let cnitool = CNI_TOOL.as_str();
@@ -159,6 +158,17 @@ fn dir_exists(dirname: &Path) -> bool {
 
 fn path_exists(path: &Path) -> Option<fs::Metadata> {
     fs::metadata(path).ok()
+}
+
+fn delete_namespace(name: &str) {
+    get_from_path(name)
+        .map(|ns| {
+            log::info!("Deleting namespace: {}", name);
+            ns.remove().unwrap();
+        })
+        .unwrap_or_else(|_| {
+            log::error!("Failed to delete namespace: {}", name);
+        });
 }
 
 #[allow(unused)]
