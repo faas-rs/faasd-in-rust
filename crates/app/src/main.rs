@@ -9,7 +9,7 @@ use provider::{
     proxy::proxy_handler::proxy_handler,
     types::config::FaaSConfig,
 };
-use service::Service;
+
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {

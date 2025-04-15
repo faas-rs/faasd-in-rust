@@ -255,7 +255,7 @@ impl Service {
         let ports = ImageManager::get_runtime_config(img_name).unwrap().ports;
         let network_config = NetworkConfig::new(path, ip, ports);
         log::info!("create_cni_network ok");
-        self.save_network_config(cid, network_config.clone()).await;
+        save_network_config(cid, network_config.clone());
         log::info!("save_netns_ip ok, netconfig: {:?}", network_config);
 
         let mut tc = self.client.tasks();

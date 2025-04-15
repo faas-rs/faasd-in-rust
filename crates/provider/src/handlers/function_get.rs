@@ -3,6 +3,8 @@ use crate::handlers::function_list::Function;
 use actix_web::cookie::time::Duration;
 
 use service;
+use service::Service;
+use std::sync::Arc;
 use std::{collections::HashMap, time::UNIX_EPOCH};
 
 use thiserror::Error;
