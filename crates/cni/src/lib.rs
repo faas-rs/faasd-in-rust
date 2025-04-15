@@ -140,17 +140,17 @@ pub fn delete_cni_network(ns: &str, cid: &str) {
     let bin = CNI_BIN_DIR.as_str();
     let cnitool = CNI_TOOL.as_str();
 
-    let _output_del = std::process::Command::new(cnitool)
-        .arg("del")
-        .arg("faasrs-cni-bridge")
-        .arg(&path)
-        .env("CNI_PATH", bin)
+    let delete_command = format!("CNI_PATH={bin} {cnitool} del faasrs-cni-bridge {path}");
+    let output = std::process::Command::new("sh")
+        .arg("-c")
+        .arg(&delete_command)
         .output();
-    let _output = std::process::Command::new("ip")
-        .arg("netns")
-        .arg("delete")
-        .arg(&netns)
-        .output();
+
+    if let Err(e) = output {
+        eprintln!("Failed to execute delete command: {}", e);
+    }
+
+    delete_namespace(&netns);
 }
 
 fn dir_exists(dirname: &Path) -> bool {
