@@ -232,9 +232,9 @@ impl Service {
         log::info!("drop sc ok");
         let _ = cni::init_net_work();
         log::info!("init_net_work ok");
-        let (ip, path) = cni::create_cni_network(cid.to_string(), ns.to_string())?;
+        let ip = cni::create_cni_network(cid.to_string(), ns.to_string())?;
         let ports = ImageManager::get_runtime_config(img_name).unwrap().ports;
-        let network_config = NetworkConfig::new(path, ip, ports);
+        let network_config = NetworkConfig::new(ip, ports);
         log::info!("create_cni_network ok");
         self.save_network_config(cid, network_config.clone()).await;
         log::info!("save_netns_ip ok, netconfig: {:?}", network_config);
@@ -474,18 +474,13 @@ impl Service {
 
 #[derive(Debug, Clone)]
 pub struct NetworkConfig {
-    netns: String,
     ip: String,
     ports: Vec<String>,
 }
 
 impl NetworkConfig {
-    pub fn new(netns: String, ip: String, ports: Vec<String>) -> Self {
-        NetworkConfig { netns, ip, ports }
-    }
-
-    pub fn get_netns(&self) -> String {
-        self.netns.clone()
+    pub fn new(ip: String, ports: Vec<String>) -> Self {
+        NetworkConfig { ip, ports }
     }
 
     pub fn get_ip(&self) -> String {
