@@ -44,6 +44,7 @@ lazy_static::lazy_static! {
 pub fn save_network_config(cid: &str, net_conf: NetworkConfig) {
     let mut map = GLOBAL_NETNS_MAP.write().unwrap();
     map.insert(cid.to_string(), net_conf);
+    println!("33333333333333333333333333333333333333333333")
 }
 
 pub fn get_network_config(cid: &str) -> Option<NetworkConfig> {
@@ -64,6 +65,7 @@ pub fn get_address(cid: &str) -> Option<String> {
 pub fn remove_netns_ip(cid: &str) {
     let mut map = GLOBAL_NETNS_MAP.write().unwrap();
     map.remove(cid);
+    println!("222222222222222222222222222222222222222222")
 }
 
 type Err = Box<dyn std::error::Error+Send+Sync>;
@@ -199,10 +201,7 @@ impl Service {
                 .await
                 .expect("Failed to delete container");
             //todo 这里删除cni?
-
             remove_netns_ip(cid);
-
-
             log::info!("Container: {:?} deleted", cc);
         } else {
             todo!("Container not found");
@@ -592,7 +591,6 @@ impl Drop for CtrInstance {
         let ns =self.ns.clone();
         tokio::spawn(async move {
             let result = service.remove_container(cid.as_str(), ns.as_str()).await;
-           
         });
     }
 }
