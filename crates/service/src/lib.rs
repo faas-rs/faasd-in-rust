@@ -18,18 +18,13 @@ lazy_static::lazy_static! {
 
 #[derive(Debug, Clone)]
 pub struct NetworkConfig {
-    netns: String,
     ip: String,
     ports: Vec<String>,
 }
 
 impl NetworkConfig {
-    pub fn new(netns: String, ip: String, ports: Vec<String>) -> Self {
-        NetworkConfig { netns, ip, ports }
-    }
-
-    pub fn get_netns(&self) -> String {
-        self.netns.clone()
+    pub fn new(ip: String, ports: Vec<String>) -> Self {
+        NetworkConfig { ip, ports }
     }
 
     pub fn get_ip(&self) -> String {

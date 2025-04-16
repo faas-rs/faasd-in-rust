@@ -470,12 +470,12 @@ impl ContainerdManager {
 
     /// 为一个容器准备cni网络并写入全局map中
     fn prepare_cni_network(cid: &str, ns: &str, image_name: &str) -> Result<(), ContainerdError> {
-        let (ip, path) = cni::create_cni_network(cid.to_string(), ns.to_string()).map_err(|e| {
+        let ip = cni::create_cni_network(cid.to_string(), ns.to_string()).map_err(|e| {
             log::error!("Failed to create CNI network: {}", e);
             ContainerdError::CreateTaskError(e.to_string())
         })?;
         let ports = ImageManager::get_runtime_config(image_name).unwrap().ports;
-        let network_config = NetworkConfig::new(path, ip, ports);
+        let network_config = NetworkConfig::new(ip, ports);
         Self::save_container_network_config(cid, network_config);
         Ok(())
     }
@@ -495,9 +495,7 @@ impl ContainerdManager {
     pub fn get_address(cid: &str) -> String {
         let map = GLOBAL_NETNS_MAP.read().unwrap();
         let config = map.get(cid).unwrap();
-        let ip = config.ip.clone();
-        let ports = config.ports[0].clone();
-        format!("{ip}:{ports}")
+        config.get_address()
     }
 
     fn remove_container_network_config(cid: &str) {
