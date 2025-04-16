@@ -56,11 +56,7 @@ impl ContainerdManager {
                 ContainerdError::CreateContainerError(e.to_string())
             })?;
 
-        let config = ImageManager::get_runtime_config(image_name).unwrap();
-        let env = config.env;
-        let args = config.args;
-
-        let spec = Self::get_spec(cid, ns, args, env).unwrap();
+        let spec = Self::get_spec(cid, ns, image_name).unwrap();
 
         let container = Container {
             id: cid.to_string(),
@@ -75,7 +71,7 @@ impl ContainerdManager {
             ..Default::default()
         };
 
-        let _ = Self::do_create_container(container, ns);
+        Self::do_create_container(container, ns).await?;
 
         Ok(())
     }
@@ -95,11 +91,7 @@ impl ContainerdManager {
     /// 删除容器
     pub async fn delete_container(cid: &str, ns: &str) -> Result<(), ContainerdError> {
         let container_list = Self::list_container(ns).await?;
-        if container_list
-            .iter()
-            .find(|container| container.id == cid)
-            .is_none()
-        {
+        if !container_list.iter().any(|container| container.id == cid) {
             log::info!("Container {} not found", cid);
             return Ok(());
         }
@@ -114,10 +106,10 @@ impl ContainerdManager {
             // TASK_EXITED (4) — 任务已退出
             // TASK_PAUSED (5) — 任务已暂停
             // TASK_FAILED (6) — 任务失败
-            let _ = Self::kill_task_with_timeout(cid, ns);
+            Self::kill_task_with_timeout(cid, ns).await?;
         }
 
-        let _ = Self::do_delete_container(cid, ns);
+        Self::do_delete_container(cid, ns).await?;
 
         Self::remove_cni_network(cid, ns).map_err(|e| {
             log::error!("Failed to remove CNI network: {}", e);
@@ -263,7 +255,6 @@ impl ContainerdManager {
         let mut c = Self::get_client().await.tasks();
         let delete_request = DeleteTaskRequest {
             container_id: cid.to_string(),
-            ..Default::default()
         };
         c.delete(with_namespace!(delete_request, ns))
             .await
@@ -357,6 +348,16 @@ impl ContainerdManager {
         ns: &str,
     ) -> Result<(), ContainerdError> {
         let parent_snapshot = Self::get_parent_snapshot(image_name).await?;
+        Self::do_prepare_snapshot(cid, ns, parent_snapshot).await?;
+
+        Ok(())
+    }
+
+    async fn do_prepare_snapshot(
+        cid: &str,
+        ns: &str,
+        parent_snapshot: String,
+    ) -> Result<(), ContainerdError> {
         let req = PrepareSnapshotRequest {
             snapshotter: "overlayfs".to_string(),
             key: cid.to_string(),
@@ -375,6 +376,7 @@ impl ContainerdManager {
 
         Ok(())
     }
+
     async fn get_parent_snapshot(image_name: &str) -> Result<String, ContainerdError> {
         let config = ImageManager::get_image_config(image_name).map_err(|e| {
             log::error!("Failed to get image config: {}", e);
@@ -405,12 +407,10 @@ impl ContainerdManager {
         Ok(ret)
     }
 
-    fn get_spec(
-        cid: &str,
-        ns: &str,
-        args: Vec<String>,
-        env: Vec<String>,
-    ) -> Result<Option<Any>, ContainerdError> {
+    fn get_spec(cid: &str, ns: &str, image_name: &str) -> Result<Option<Any>, ContainerdError> {
+        let config = ImageManager::get_runtime_config(image_name).unwrap();
+        let env = config.env;
+        let args = config.args;
         let spec_path = generate_spec(cid, ns, args, env).map_err(|e| {
             log::error!("Failed to generate spec: {}", e);
             ContainerdError::GenerateSpecError(e.to_string())
