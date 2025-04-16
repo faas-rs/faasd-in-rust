@@ -19,16 +19,18 @@ use containerd_client::{
     with_namespace,
 };
 use image_manager::ImageManager;
+use tokio::runtime;
 use prost_types::Any;
 use sha2::{Digest, Sha256};
 use spec::{DEFAULT_NAMESPACE, generate_spec};
+use core::sync;
 use std::{
     collections::HashMap,
     fs,
     sync::{Arc, RwLock},
     time::Duration,
 };
-use tokio::task;
+
 use tokio::time::timeout;
 
 // config.json,dockerhub密钥
@@ -64,7 +66,7 @@ pub fn remove_netns_ip(cid: &str) {
     map.remove(cid);
 }
 
-type Err = Box<dyn std::error::Error>;
+type Err = Box<dyn std::error::Error+Send+Sync>;
 
 pub struct Service {
     pub client: Arc<Client>,
@@ -255,7 +257,7 @@ impl Service {
         let ports = ImageManager::get_runtime_config(img_name).unwrap().ports;
         let network_config = NetworkConfig::new(path, ip, ports);
         log::info!("create_cni_network ok");
-        save_network_config(cid, network_config.clone());
+        //save_network_config(cid, network_config.clone());
         log::info!("save_netns_ip ok, netconfig: {:?}", network_config);
 
         let mut tc = self.client.tasks();
@@ -535,6 +537,7 @@ impl NetworkConfig {
 impl Drop for NetworkConfig {
     fn drop(&mut self) {
         let (ns, cid) = self.extract_ns_cid().unwrap();
+        println!("111111111111111111111111111111111111111111111111111111111111111");
         delete_cni_network(ns, cid);
     }
 }
@@ -577,28 +580,21 @@ impl CtrInstance {
             .service
             .create_and_start_task(&self.cid, &self.ns, &self.image)
             .await?;
-        save_network_config(&self.cid, networkconfig.clone());
+        save_network_config(&self.cid, networkconfig);
         Ok(())
     }
 }
 
 impl Drop for CtrInstance {
     fn drop(&mut self) {
-        remove_netns_ip(&self.cid);
-        task::block_in_place(|| {
-            let fut = async {
-                dbg!(self.service.delete_task(&self.cid, &self.ns).await.unwrap());
-                dbg!(
-                    self.service
-                        .remove_container(&self.cid, &self.ns)
-                        .await
-                        .unwrap()
-                );
-            };
-            tokio::runtime::Handle::current().block_on(fut)
+        let service = self.service.clone();
+        let cid = self.cid.clone();
+        let ns =self.ns.clone();
+        tokio::spawn(async move {
+            let result = service.remove_container(cid.as_str(), ns.as_str()).await;
+           
         });
-
-        //GLOBAL_NETNS_MAP.
     }
-
 }
+
+

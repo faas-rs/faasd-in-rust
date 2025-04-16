@@ -5,6 +5,7 @@ use crate::{
 use actix_web::{HttpResponse, Responder, ResponseError, error, web};
 use serde::{Deserialize, Serialize};
 use service::{CONTAINER_MAP, Service};
+use crate::handlers::function_get::get_function;
 use std::sync::Arc;
 
 pub async fn delete_handler(
