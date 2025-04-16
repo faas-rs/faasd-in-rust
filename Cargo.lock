@@ -254,9 +254,9 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.95"
+version = "1.0.98"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "34ac096ce696dc2fcabef30516bb13c0a68a11d30131d3df6f04711467681b04"
+checksum = "e16d2d3311acee920a9eb8d33b8cbc1787ce4a264e85f964c2404b969bdcd487"
 
 [[package]]
 name = "arrayvec"
@@ -517,6 +517,7 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 name = "cni"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "dotenv",
  "lazy_static",
  "log",
@@ -2076,6 +2077,7 @@ dependencies = [
  "actix-service",
  "actix-web",
  "actix-web-httpauth",
+ "anyhow",
  "async-trait",
  "base64 0.13.1",
  "bollard",
@@ -2413,6 +2415,7 @@ dependencies = [
 name = "service"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "cni",
  "containerd-client",
  "env_logger",

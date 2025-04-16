@@ -75,7 +75,7 @@ pub async fn get_function(
         image,
         pid,
         replicas,
-        address,
+        address: address.unwrap_or_default(),
         labels,
         env_vars,
         env_process,

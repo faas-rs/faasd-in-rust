@@ -19,3 +19,4 @@ my-workspace-hack = { version = "0.1", path = "../my-workspace-hack" }
 cni = { version = "0.1", path = "../cni" }
 handlebars= "4.1.0"
 lazy_static = "1.4"
+anyhow ="1.0"

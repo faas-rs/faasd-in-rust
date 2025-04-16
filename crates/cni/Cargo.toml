@@ -12,3 +12,4 @@ log = "0.4.27"
 dotenv = "0.15.0"
 
 lazy_static = "1.4.0"
+anyhow = "1.0"
