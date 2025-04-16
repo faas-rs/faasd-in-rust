@@ -51,18 +51,18 @@ tracing-core = { version = "0.1", default-features = false, features = ["std"] }
 
 [target.x86_64-unknown-linux-gnu.dependencies]
 getrandom = { version = "0.2", default-features = false, features = ["std"] }
-libc = { version = "0.2" }
+libc = { version = "0.2", features = ["extra_traits"] }
 
 [target.x86_64-unknown-linux-gnu.build-dependencies]
 getrandom = { version = "0.2", default-features = false, features = ["std"] }
-libc = { version = "0.2" }
+libc = { version = "0.2", features = ["extra_traits"] }
 
 [target.aarch64-unknown-linux-gnu.dependencies]
 getrandom = { version = "0.2", default-features = false, features = ["std"] }
-libc = { version = "0.2" }
+libc = { version = "0.2", features = ["extra_traits"] }
 
 [target.aarch64-unknown-linux-gnu.build-dependencies]
 getrandom = { version = "0.2", default-features = false, features = ["std"] }
-libc = { version = "0.2" }
+libc = { version = "0.2", features = ["extra_traits"] }
 
 ### END HAKARI SECTION
