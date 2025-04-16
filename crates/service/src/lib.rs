@@ -19,7 +19,7 @@ use containerd_client::{
     with_namespace,
 };
 use image_manager::ImageManager;
-use tokio::runtime;
+use tokio::signal;
 use prost_types::Any;
 use sha2::{Digest, Sha256};
 use spec::{DEFAULT_NAMESPACE, generate_spec};
@@ -589,9 +589,17 @@ impl Drop for CtrInstance {
         let service = self.service.clone();
         let cid = self.cid.clone();
         let ns =self.ns.clone();
-        tokio::spawn(async move {
+        let join = tokio::spawn(async move {
+            match signal::ctrl_c().await {
+                Ok(()) => {},
+                Err(err) => {
+                    eprintln!("Unable to listen for shutdown signal: {}", err);
+                    // we also shut down in case of error
+                },
+            }
             let result = service.remove_container(cid.as_str(), ns.as_str()).await;
         });
+        
     }
 }
 
