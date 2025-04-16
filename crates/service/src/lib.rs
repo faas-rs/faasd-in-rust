@@ -1,3 +1,4 @@
+pub mod containerd_manager;
 pub mod image_manager;
 pub mod spec;
 pub mod systemd;
