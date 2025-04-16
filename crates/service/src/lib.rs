@@ -590,13 +590,6 @@ impl Drop for CtrInstance {
         let cid = self.cid.clone();
         let ns =self.ns.clone();
         let join = tokio::spawn(async move {
-            match signal::ctrl_c().await {
-                Ok(()) => {},
-                Err(err) => {
-                    eprintln!("Unable to listen for shutdown signal: {}", err);
-                    // we also shut down in case of error
-                },
-            }
             let result = service.remove_container(cid.as_str(), ns.as_str()).await;
         });
         
