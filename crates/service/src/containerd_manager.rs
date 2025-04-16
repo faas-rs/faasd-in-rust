@@ -4,13 +4,13 @@ use containerd_client::{
     Client,
     services::v1::{
         Container, CreateContainerRequest, CreateTaskRequest, DeleteContainerRequest,
-        DeleteTaskRequest, KillRequest, ListContainersRequest, ListTasksRequest, ListTasksResponse,
-        StartRequest, WaitRequest, WaitResponse,
+        DeleteTaskRequest, KillRequest, ListContainersRequest, ListNamespacesRequest,
+        ListTasksRequest, ListTasksResponse, StartRequest, WaitRequest, WaitResponse,
         container::Runtime,
         snapshots::{MountsRequest, PrepareSnapshotRequest},
     },
     tonic::Request,
-    types::Mount,
+    types::{Mount, v1::Process},
     with_namespace,
 };
 use prost_types::Any;
@@ -22,7 +22,7 @@ use tokio::{
 
 use crate::{GLOBAL_NETNS_MAP, NetworkConfig, image_manager::ImageManager, spec::generate_spec};
 
-static CLIENT: OnceCell<Arc<Client>> = OnceCell::const_new();
+pub(super) static CLIENT: OnceCell<Arc<Client>> = OnceCell::const_new();
 
 #[derive(Debug)]
 pub struct ContainerdManager;
@@ -176,6 +176,31 @@ impl ContainerdManager {
             })?;
 
         Ok(())
+    }
+
+    pub async fn get_task(cid: &str, ns: &str) -> Result<Process, ContainerdError> {
+        let mut tc = Self::get_client().await.tasks();
+
+        let request = ListTasksRequest {
+            filter: format!("container=={}", cid),
+        };
+
+        let response = tc.list(with_namespace!(request, ns)).await.map_err(|e| {
+            log::error!("Failed to list tasks: {}", e);
+            ContainerdError::GetContainerListError(e.to_string())
+        })?;
+        let tasks = response.into_inner().tasks;
+
+        let task =
+            tasks
+                .into_iter()
+                .find(|task| task.id == cid)
+                .ok_or_else(|| -> ContainerdError {
+                    log::error!("Task not found for container: {}", cid);
+                    ContainerdError::CreateTaskError("Task not found".to_string())
+                })?;
+
+        Ok(task)
     }
 
     async fn get_mounts(cid: &str, ns: &str) -> Result<Vec<Mount>, ContainerdError> {
@@ -342,6 +367,26 @@ impl ContainerdManager {
         Ok(resp.into_inner().containers)
     }
 
+    pub async fn list_container_into_string(ns: &str) -> Result<Vec<String>, ContainerdError> {
+        let mut cc = Self::get_client().await.containers();
+
+        let request = ListContainersRequest {
+            ..Default::default()
+        };
+
+        let resp = cc.list(with_namespace!(request, ns)).await.map_err(|e| {
+            log::error!("Failed to list containers: {}", e);
+            ContainerdError::CreateContainerError(e.to_string())
+        })?;
+
+        Ok(resp
+            .into_inner()
+            .containers
+            .into_iter()
+            .map(|container| container.id)
+            .collect())
+    }
+
     async fn prepare_snapshot(
         image_name: &str,
         cid: &str,
@@ -447,14 +492,34 @@ impl ContainerdManager {
         map.insert(cid.to_string(), net_conf);
     }
 
-    // fn get_container_network_config(cid: &str) -> Option<NetworkConfig> {
-    //     let map = GLOBAL_NETNS_MAP.read().unwrap();
-    //     map.get(cid).cloned()
-    // }
+    pub fn get_address(cid: &str) -> String {
+        let map = GLOBAL_NETNS_MAP.read().unwrap();
+        let config = map.get(cid).unwrap();
+        let ip = config.ip.clone();
+        let ports = config.ports[0].clone();
+        format!("{ip}:{ports}")
+    }
 
     fn remove_container_network_config(cid: &str) {
         let mut map = GLOBAL_NETNS_MAP.write().unwrap();
         map.remove(cid);
+    }
+
+    pub async fn list_namespaces() -> Result<Vec<String>, ContainerdError> {
+        let mut c = Self::get_client().await.namespaces();
+        let req = ListNamespacesRequest {
+            ..Default::default()
+        };
+        let resp = c.list(req).await.map_err(|e| {
+            log::error!("Failed to list namespaces: {}", e);
+            ContainerdError::GetContainerListError(e.to_string())
+        })?;
+        Ok(resp
+            .into_inner()
+            .namespaces
+            .into_iter()
+            .map(|ns| ns.name)
+            .collect())
     }
 
     pub async fn pause_task() {

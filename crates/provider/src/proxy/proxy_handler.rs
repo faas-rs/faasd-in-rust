@@ -9,15 +9,9 @@ use crate::{handlers::invoke_resolver::InvokeResolver, types::config::FaaSConfig
 
 pub async fn proxy_handler(
     config: web::Data<FaaSConfig>,
-    resolver: web::Data<Option<InvokeResolver>>,
     req: HttpRequest,
     payload: web::Payload,
 ) -> impl Responder {
-    let resolver_option = resolver.as_ref();
-    let resolver = resolver_option
-        .as_ref()
-        .expect("empty proxy handler resolver, cannot be nil");
-
     let proxy_client = new_proxy_client_from_config(config.as_ref()).await;
     log::info!("proxy_client : {:?}", proxy_client);
 
@@ -28,7 +22,7 @@ pub async fn proxy_handler(
         | Method::GET
         | Method::PATCH
         | Method::HEAD
-        | Method::OPTIONS => match proxy_request(&req, payload, &proxy_client, resolver).await {
+        | Method::OPTIONS => match proxy_request(&req, payload, &proxy_client).await {
             Ok(resp) => resp,
             Err(e) => HttpResponse::InternalServerError().body(e.to_string()),
         },
@@ -67,14 +61,13 @@ async fn proxy_request(
     req: &HttpRequest,
     payload: web::Payload,
     proxy_client: &Client,
-    resolver: &InvokeResolver,
 ) -> Result<HttpResponse, Error> {
     let function_name = req.match_info().get("name").unwrap_or("");
     if function_name.is_empty() {
         return Ok(HttpResponse::BadRequest().body("provide function name in path"));
     }
 
-    let function_addr = match resolver.resolve(function_name).await {
+    let function_addr = match InvokeResolver::resolve(function_name).await {
         Ok(function_addr) => function_addr,
         Err(e) => return Ok(HttpResponse::BadRequest().body(e.to_string())),
     };

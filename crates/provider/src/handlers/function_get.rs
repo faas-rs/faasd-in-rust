@@ -1,8 +1,8 @@
 use crate::handlers::function_list::Function;
 // use service::spec::{ Mount, Spec};
 use actix_web::cookie::time::Duration;
-use service::Service;
-use std::{collections::HashMap, sync::Arc, time::UNIX_EPOCH};
+use service::{containerd_manager::ContainerdManager, image_manager::ImageManager};
+use std::{collections::HashMap, time::UNIX_EPOCH};
 use thiserror::Error;
 
 const ANNOTATION_LABEL_PREFIX: &str = "com.openfaas.annotations.";
@@ -21,18 +21,14 @@ impl From<Box<dyn std::error::Error>> for FunctionError {
     }
 }
 
-pub async fn get_function(
-    service: &Arc<Service>,
-    function_name: &str,
-    namespace: &str,
-) -> Result<Function, FunctionError> {
+pub async fn get_function(function_name: &str, namespace: &str) -> Result<Function, FunctionError> {
     let cid = function_name;
-    let address = service.get_address(cid).await.unwrap_or_default();
+    let address = ContainerdManager::get_address(cid);
 
-    let container = service
-        .load_container(cid, namespace)
+    let container = ContainerdManager::load_container(cid, namespace)
         .await
-        .map_err(|e| FunctionError::FunctionNotFound(e.to_string()))?;
+        .map_err(|e| FunctionError::FunctionNotFound(e.to_string()))?
+        .unwrap();
 
     let container_name = container.id.to_string();
     let image = container.image.clone();
@@ -42,7 +38,7 @@ pub async fn get_function(
     let all_labels = container.labels;
     let (labels, _) = build_labels_and_annotations(all_labels);
 
-    let env = service::image_manager::ImageManager::get_runtime_config(&image)
+    let env = ImageManager::get_runtime_config(&image)
         .map_err(|e| FunctionError::RuntimeConfigNotFound(e.to_string()))?
         .env;
     let (env_vars, env_process) = read_env_from_process_env(env);
@@ -51,8 +47,7 @@ pub async fn get_function(
     let timestamp = container.created_at.unwrap_or_default();
     let created_at = UNIX_EPOCH + Duration::new(timestamp.seconds, timestamp.nanos);
 
-    let task = service
-        .get_task(cid, namespace)
+    let task = ContainerdManager::get_task(cid, namespace)
         .await
         .map_err(|e| FunctionError::FunctionNotFound(e.to_string()));
     match task {

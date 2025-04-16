@@ -16,7 +16,7 @@ use containerd_client::{
 };
 use oci_spec::image::{Arch, ImageConfiguration, ImageIndex, ImageManifest, MediaType, Os};
 
-use crate::spec::DEFAULT_NAMESPACE;
+use crate::{containerd_manager::CLIENT, spec::DEFAULT_NAMESPACE};
 
 type ImagesMap = Arc<RwLock<HashMap<String, ImageConfiguration>>>;
 lazy_static::lazy_static! {
@@ -81,39 +81,52 @@ impl std::error::Error for ImageError {}
 pub struct ImageManager;
 
 impl ImageManager {
+    async fn get_client() -> Arc<Client> {
+        CLIENT
+            .get()
+            .unwrap_or_else(|| panic!("Client not initialized, Please run init first"))
+            .clone()
+    }
+
     pub async fn prepare_image(
-        client: &Client,
         image_name: &str,
         ns: &str,
         always_pull: bool,
     ) -> Result<(), ImageError> {
         if always_pull {
-            Self::pull_image(client, image_name, ns).await?;
+            Self::pull_image(image_name, ns).await?;
         } else {
             let namespace = check_namespace(ns);
             let namespace = namespace.as_str();
-            let mut c = client.images();
-            let req = GetImageRequest {
-                name: image_name.to_string(),
-            };
 
-            let resp = match c.get(with_namespace!(req, namespace)).await {
-                Ok(response) => response.into_inner(),
-                Err(e) => {
-                    return Err(ImageError::ImageNotFound(format!(
-                        "Failed to get image {}: {}",
-                        image_name, e
-                    )));
-                }
-            };
-            if resp.image.is_none() {
-                Self::pull_image(client, image_name, ns).await?;
-            }
+            Self::get_image(image_name, namespace).await?;
         }
-        Self::save_img_config(client, image_name, ns).await
+        Self::save_img_config(image_name, ns).await
     }
 
-    pub async fn pull_image(client: &Client, image_name: &str, ns: &str) -> Result<(), ImageError> {
+    async fn get_image(image_name: &str, ns: &str) -> Result<(), ImageError> {
+        let mut c = Self::get_client().await.images();
+        let req = GetImageRequest {
+            name: image_name.to_string(),
+        };
+
+        let resp = match c.get(with_namespace!(req, ns)).await {
+            Ok(response) => response.into_inner(),
+            Err(e) => {
+                return Err(ImageError::ImageNotFound(format!(
+                    "Failed to get image {}: {}",
+                    image_name, e
+                )));
+            }
+        };
+        if resp.image.is_none() {
+            Self::pull_image(image_name, ns).await?;
+        }
+        Ok(())
+    }
+
+    pub async fn pull_image(image_name: &str, ns: &str) -> Result<(), ImageError> {
+        let client = Self::get_client().await;
         let ns = check_namespace(ns);
         let namespace = ns.as_str();
 
@@ -164,11 +177,8 @@ impl ImageManager {
         // Self::save_img_config(client, image_name, ns.as_str()).await
     }
 
-    pub async fn save_img_config(
-        client: &Client,
-        img_name: &str,
-        ns: &str,
-    ) -> Result<(), ImageError> {
+    pub async fn save_img_config(img_name: &str, ns: &str) -> Result<(), ImageError> {
+        let client = Self::get_client().await;
         let mut c = client.images();
 
         let req = GetImageRequest {
@@ -217,14 +227,14 @@ impl ImageManager {
         drop(c);
 
         let img_config = match media_type {
-            MediaType::ImageIndex => Self::handle_index(client, &resp, ns).await.unwrap(),
-            MediaType::ImageManifest => Self::handle_manifest(client, &resp, ns).await.unwrap(),
+            MediaType::ImageIndex => Self::handle_index(&resp, ns).await.unwrap(),
+            MediaType::ImageManifest => Self::handle_manifest(&resp, ns).await.unwrap(),
             MediaType::Other(media_type) => match media_type.as_str() {
                 "application/vnd.docker.distribution.manifest.list.v2+json" => {
-                    Self::handle_index(client, &resp, ns).await.unwrap()
+                    Self::handle_index(&resp, ns).await.unwrap()
                 }
                 "application/vnd.docker.distribution.manifest.v2+json" => {
-                    Self::handle_manifest(client, &resp, ns).await.unwrap()
+                    Self::handle_manifest(&resp, ns).await.unwrap()
                 }
                 _ => {
                     return Err(ImageError::UnexpectedMediaType);
@@ -244,11 +254,7 @@ impl ImageManager {
         Self::insert_image_config(img_name, img_config)
     }
 
-    async fn handle_index(
-        client: &Client,
-        data: &[u8],
-        ns: &str,
-    ) -> Result<Option<ImageConfiguration>, ImageError> {
+    async fn handle_index(data: &[u8], ns: &str) -> Result<Option<ImageConfiguration>, ImageError> {
         let image_index: ImageIndex = ::serde_json::from_slice(data).map_err(|e| {
             ImageError::DeserializationFailed(format!("Failed to parse JSON: {}", e))
         })?;
@@ -277,7 +283,7 @@ impl ImageManager {
             size: 0,
         };
 
-        let mut c = client.content();
+        let mut c = Self::get_client().await.content();
         let mut inner = match c.read(with_namespace!(req, ns)).await {
             Ok(response) => response.into_inner(),
             Err(e) => {
@@ -299,11 +305,10 @@ impl ImageManager {
         };
         drop(c);
 
-        Self::handle_manifest(client, &resp, ns).await
+        Self::handle_manifest(&resp, ns).await
     }
 
     async fn handle_manifest(
-        client: &Client,
         data: &[u8],
         ns: &str,
     ) -> Result<Option<ImageConfiguration>, ImageError> {
@@ -323,7 +328,7 @@ impl ImageManager {
             offset: 0,
             size: 0,
         };
-        let mut c = client.content();
+        let mut c = Self::get_client().await.content();
 
         let mut inner = match c.read(with_namespace!(req, ns)).await {
             Ok(response) => response.into_inner(),

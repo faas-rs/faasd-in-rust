@@ -1,4 +1,4 @@
-use crate::Err;
+type Err = Box<dyn std::error::Error + Send + Sync>;
 use handlebars::Handlebars;
 use std::{collections::HashMap, fs::File, io::Write, path::Path};
 

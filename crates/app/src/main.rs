@@ -1,32 +1,25 @@
-use std::sync::Arc;
-
 use actix_web::{App, HttpServer, web};
 use provider::{
-    handlers::{delete::delete_handler, deploy::deploy_handler, invoke_resolver::InvokeResolver},
+    handlers::{delete::delete_handler, deploy::deploy_handler},
     proxy::proxy_handler::proxy_handler,
     types::config::FaaSConfig,
 };
-use service::Service;
+use service::containerd_manager::ContainerdManager;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     dotenv::dotenv().ok();
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
-    let service = Arc::new(
-        Service::new("/run/containerd/containerd.sock")
-            .await
-            .unwrap(),
-    );
+    let socket_path = std::env::var("SOCKET_PATH")
+        .unwrap_or_else(|_| "/run/containerd/containerd.sock".to_string());
+    ContainerdManager::init(&socket_path).await;
 
-    let resolver = Some(InvokeResolver::new(service.clone()).await);
     let faas_config = FaaSConfig::new();
 
     log::info!("I'm running!");
 
     let server = HttpServer::new(move || {
         App::new()
-            .app_data(web::Data::new(service.clone()))
-            .app_data(web::Data::new(resolver.clone()))
             .app_data(web::Data::new(faas_config.clone()))
             .route("/system/functions", web::post().to(deploy_handler))
             .route("/system/functions", web::delete().to(delete_handler))

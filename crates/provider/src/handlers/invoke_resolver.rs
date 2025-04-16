@@ -2,21 +2,13 @@ use crate::consts::DEFAULT_FUNCTION_NAMESPACE;
 use crate::handlers::function_get::get_function;
 use actix_web::{Error, error::ErrorInternalServerError};
 use log;
-use service::Service;
-use std::sync::Arc;
 use url::Url;
 
 #[derive(Clone)]
-pub struct InvokeResolver {
-    client: Arc<Service>,
-}
+pub struct InvokeResolver;
 
 impl InvokeResolver {
-    pub async fn new(client: Arc<Service>) -> Self {
-        Self { client }
-    }
-
-    pub async fn resolve(&self, function_name: &str) -> Result<Url, Error> {
+    pub async fn resolve(function_name: &str) -> Result<Url, Error> {
         //根据函数名和containerd获取函数ip，
         //从函数名称中提取命名空间。如果函数名称中包含 .，则将其后的部分作为命名空间；否则使用默认命名空间
 
@@ -26,7 +18,7 @@ impl InvokeResolver {
         //     actual_function_name = function_name.trim_end_matches(&format!(".{}", namespace));
         // }
 
-        let function = match get_function(&self.client, function_name, &namespace).await {
+        let function = match get_function(function_name, &namespace).await {
             Ok(function) => function,
             Err(e) => {
                 log::error!("Failed to get function:{}", e);
