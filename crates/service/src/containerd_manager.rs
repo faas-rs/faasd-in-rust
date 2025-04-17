@@ -454,9 +454,7 @@ impl ContainerdManager {
 
     fn get_spec(cid: &str, ns: &str, image_name: &str) -> Result<Option<Any>, ContainerdError> {
         let config = ImageManager::get_runtime_config(image_name).unwrap();
-        let env = config.env;
-        let args = config.args;
-        let spec_path = generate_spec(cid, ns, args, env).map_err(|e| {
+        let spec_path = generate_spec(cid, ns, &config).map_err(|e| {
             log::error!("Failed to generate spec: {}", e);
             ContainerdError::GenerateSpecError(e.to_string())
         })?;

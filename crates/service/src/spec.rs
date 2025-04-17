@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 
+use crate::image_manager::ImageRuntimeConfig;
+
 // 定义版本的常量
 const VERSION_MAJOR: u32 = 1;
 const VERSION_MINOR: u32 = 1;
@@ -319,16 +321,16 @@ fn get_netns(ns: &str, cid: &str) -> String {
 pub fn generate_spec(
     id: &str,
     ns: &str,
-    args: Vec<String>,
-    env: Vec<String>,
+    runtime_config: &ImageRuntimeConfig,
 ) -> Result<String, std::io::Error> {
     let namespace = match ns {
         "" => DEFAULT_NAMESPACE,
         _ => ns,
     };
     let mut spec = populate_default_unix_spec(id, ns);
-    spec.process.args = args;
-    spec.process.env = env;
+    spec.process.args = runtime_config.args.clone();
+    spec.process.env = runtime_config.env.clone();
+    spec.process.cwd = runtime_config.cwd.clone();
     let dir_path = format!("{}/{}", PATH_TO_SPEC_PREFIX, namespace);
     let path = format!("{}/{}.json", dir_path, id);
     std::fs::create_dir_all(&dir_path)?;

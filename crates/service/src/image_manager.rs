@@ -28,11 +28,17 @@ pub struct ImageRuntimeConfig {
     pub env: Vec<String>,
     pub args: Vec<String>,
     pub ports: Vec<String>,
+    pub cwd: String,
 }
 
 impl ImageRuntimeConfig {
-    pub fn new(env: Vec<String>, args: Vec<String>, ports: Vec<String>) -> Self {
-        ImageRuntimeConfig { env, args, ports }
+    pub fn new(env: Vec<String>, args: Vec<String>, ports: Vec<String>, cwd: String) -> Self {
+        ImageRuntimeConfig {
+            env,
+            args,
+            ports,
+            cwd,
+        }
     }
 }
 
@@ -387,7 +393,11 @@ impl ImageManager {
                     .exposed_ports()
                     .clone()
                     .expect("Failed to get exposed ports");
-                Ok(ImageRuntimeConfig::new(env, args, ports))
+                let cwd = config
+                    .working_dir()
+                    .clone()
+                    .expect("Failed to get working dir");
+                Ok(ImageRuntimeConfig::new(env, args, ports, cwd))
             } else {
                 Err(ImageError::ImageConfigurationNotFound(format!(
                     "Image configuration is empty for image {}",
