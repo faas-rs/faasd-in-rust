@@ -1,7 +1,10 @@
 use crate::handlers::function_list::Function;
 // use service::spec::{ Mount, Spec};
 use actix_web::cookie::time::Duration;
-use service::{containerd_manager::{self, CtrInstance,ContainerdManager}, image_manager::ImageManager};
+use service::{
+    containerd_manager::{ContainerdManager, CtrInstance},
+    image_manager::ImageManager,
+};
 use std::{collections::HashMap, time::UNIX_EPOCH};
 use thiserror::Error;
 
@@ -21,9 +24,14 @@ impl From<Box<dyn std::error::Error>> for FunctionError {
     }
 }
 
-pub async fn get_function(function_name: &str, namespace: &str,containerd_manager:&ContainerdManager) -> Result<Function, FunctionError> {
+pub async fn get_function(
+    function_name: &str,
+    namespace: &str,
+    containerd_manager: &ContainerdManager,
+) -> Result<Function, FunctionError> {
     let cid = function_name;
-    let address = containerd_manager.get_network_address((String::from(namespace),String::from(function_name)));
+    let address = containerd_manager
+        .get_network_address((String::from(namespace), String::from(function_name)));
 
     let container = CtrInstance::load_container(cid, namespace)
         .await
@@ -40,7 +48,6 @@ pub async fn get_function(function_name: &str, namespace: &str,containerd_manage
 
     let env = ImageManager::get_runtime_config(&image)
         .map_err(|e| FunctionError::RuntimeConfigNotFound(e.to_string()))?
-
         .env;
     let (env_vars, env_process) = read_env_from_process_env(env);
     // let secrets = read_secrets_from_mounts(&spec.mounts);

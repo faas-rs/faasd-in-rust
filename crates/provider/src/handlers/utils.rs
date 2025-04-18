@@ -3,7 +3,7 @@ use actix_web::{Error, HttpResponse, ResponseError};
 use derive_more::Display;
 use service::image_manager::ImageError;
 
-pub fn map_service_error(e: Box<dyn std::error::Error+Sync+Send>) -> Error {
+pub fn map_service_error(e: Box<dyn std::error::Error + Sync + Send>) -> Error {
     log::error!("Service error: {}", e);
     actix_web::error::ErrorInternalServerError(format!("Operationfailed: {}", e))
 }

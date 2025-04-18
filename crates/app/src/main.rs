@@ -5,12 +5,12 @@ use provider::{
     proxy::proxy_handler::proxy_handler,
     types::config::FaaSConfig,
 };
-use service::containerd_manager::{ContainerdManager,CtrInstance};
-use std::sync::atomic::Ordering;
+use service::containerd_manager::{ContainerdManager, CtrInstance};
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
-use tokio::time::sleep;
+use std::sync::atomic::Ordering;
 use tokio::time::Duration;
+use tokio::time::sleep;
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
@@ -30,13 +30,13 @@ async fn main() -> std::io::Result<()> {
             .route("/system/functions", web::post().to(deploy_handler))
             .route("/system/functions", web::delete().to(delete_handler))
             .route("/function/{name}{path:/?.*}", web::to(proxy_handler))
-            
+
         // 更多路由配置...
     })
     .bind("0.0.0.0:8090")?
-        // disable default signal handling
-        .disable_signals()
-        .run();
+    // disable default signal handling
+    .disable_signals()
+    .run();
 
     let server_handle = server.handle();
     let task_shutdown_marker = Arc::new(AtomicBool::new(false));
@@ -46,10 +46,7 @@ async fn main() -> std::io::Result<()> {
     let shutdown = tokio::spawn(async move {
         // listen for ctrl-c
         tokio::signal::ctrl_c().await.unwrap();
-        containerdmanager_clone.get_self()
-        .write()
-        .unwrap()
-        .clear();
+        containerdmanager_clone.get_self().write().unwrap().clear();
         sleep(Duration::from_secs(3)).await;
         // start shutdown of tasks
         let server_stop = server_handle.stop(true);

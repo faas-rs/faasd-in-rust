@@ -1,5 +1,5 @@
 use futures::StreamExt;
-use service::containerd_manager::{self, CtrInstance,ContainerdManager};
+use service::containerd_manager::ContainerdManager;
 use std::time::Duration;
 
 use actix_web::{Error, HttpRequest, HttpResponse, Responder, http::Method, web};
@@ -12,12 +12,11 @@ pub async fn proxy_handler(
     config: web::Data<FaaSConfig>,
     req: HttpRequest,
     payload: web::Payload,
-    containerd_manager:web::Data<ContainerdManager>
+    containerd_manager: web::Data<ContainerdManager>,
 ) -> impl Responder {
     let proxy_client = new_proxy_client_from_config(config.as_ref()).await;
 
     log::info!("proxy_client : {:?}", proxy_client);
-
 
     match *req.method() {
         Method::POST
@@ -26,10 +25,12 @@ pub async fn proxy_handler(
         | Method::GET
         | Method::PATCH
         | Method::HEAD
-        | Method::OPTIONS => match proxy_request(&req, payload, &proxy_client,containerd_manager).await {
-            Ok(resp) => resp,
-            Err(e) => HttpResponse::InternalServerError().body(e.to_string()),
-        },
+        | Method::OPTIONS => {
+            match proxy_request(&req, payload, &proxy_client, containerd_manager).await {
+                Ok(resp) => resp,
+                Err(e) => HttpResponse::InternalServerError().body(e.to_string()),
+            }
+        }
         _ => HttpResponse::MethodNotAllowed().body("method not allowed"),
     }
 }
@@ -65,17 +66,18 @@ async fn proxy_request(
     req: &HttpRequest,
     payload: web::Payload,
     proxy_client: &Client,
-    containerd_manager:web::Data<ContainerdManager>
+    containerd_manager: web::Data<ContainerdManager>,
 ) -> Result<HttpResponse, Error> {
     let function_name = req.match_info().get("name").unwrap_or("");
     if function_name.is_empty() {
         return Ok(HttpResponse::BadRequest().body("provide function name in path"));
     }
 
-    let function_addr = match InvokeResolver::resolve(function_name,containerd_manager.get_ref()).await {
-        Ok(function_addr) => function_addr,
-        Err(e) => return Ok(HttpResponse::BadRequest().body(e.to_string())),
-    };
+    let function_addr =
+        match InvokeResolver::resolve(function_name, containerd_manager.get_ref()).await {
+            Ok(function_addr) => function_addr,
+            Err(e) => return Ok(HttpResponse::BadRequest().body(e.to_string())),
+        };
 
     let proxy_req = build_proxy_request(req, &function_addr, proxy_client, payload).await?;
 
