@@ -12,13 +12,13 @@ impl InvokeResolver {
         //根据函数名和containerd获取函数ip，
         //从函数名称中提取命名空间。如果函数名称中包含 .，则将其后的部分作为命名空间；否则使用默认命名空间
 
-        // let mut actual_function_name = function_name;
+        let mut actual_function_name = function_name;
         let namespace = get_namespace_or_default(function_name, DEFAULT_FUNCTION_NAMESPACE);
-        // if function_name.contains('.') {
-        //     actual_function_name = function_name.trim_end_matches(&format!(".{}", namespace));
-        // }
+        if function_name.contains('.') {
+            actual_function_name = function_name.trim_end_matches(&format!(".{}", namespace));
+        }
 
-        let function = match get_function(function_name, &namespace).await {
+        let function = match get_function(actual_function_name, &namespace).await {
             Ok(function) => function,
             Err(e) => {
                 log::error!("Failed to get function:{}", e);

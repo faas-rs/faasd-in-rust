@@ -1,6 +1,8 @@
 use actix_web::{App, HttpServer, web};
 use provider::{
-    handlers::{delete::delete_handler, deploy::deploy_handler},
+    handlers::{
+        delete::delete_handler, deploy::deploy_handler, function_list::function_list_handler,
+    },
     proxy::proxy_handler::proxy_handler,
     types::config::FaaSConfig,
 };
@@ -24,6 +26,10 @@ async fn main() -> std::io::Result<()> {
             .route("/system/functions", web::post().to(deploy_handler))
             .route("/system/functions", web::delete().to(delete_handler))
             .route("/function/{name}{path:/?.*}", web::to(proxy_handler))
+            .route(
+                "/system/functions/{namespace}",
+                web::get().to(function_list_handler),
+            )
         // 更多路由配置...
     })
     .bind("0.0.0.0:8090")?;
