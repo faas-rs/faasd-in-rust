@@ -3,18 +3,8 @@ pub mod image_manager;
 pub mod spec;
 pub mod systemd;
 
-use std::{
-    collections::HashMap,
-    sync::{Arc, RwLock},
-};
-
 // config.json,dockerhub密钥
 // const DOCKER_CONFIG_DIR: &str = "/var/lib/faasd/.docker/";
-
-type NetnsMap = Arc<RwLock<HashMap<String, NetworkConfig>>>;
-lazy_static::lazy_static! {
-    static ref GLOBAL_NETNS_MAP: NetnsMap = Arc::new(RwLock::new(HashMap::new()));
-}
 
 #[derive(Debug, Clone)]
 pub struct NetworkConfig {
@@ -38,4 +28,7 @@ impl NetworkConfig {
             self.ports[0].split('/').next().unwrap_or("")
         )
     }
+}
+impl Drop for NetworkConfig {
+    fn drop(&mut self) {}
 }
