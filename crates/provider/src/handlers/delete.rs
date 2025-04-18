@@ -1,24 +1,19 @@
 use crate::{
     consts,
-    handlers::utils::{CustomError, map_service_error},
+    handlers::{function_get::get_function, utils::CustomError},
 };
 use actix_web::{HttpResponse, Responder, ResponseError, error, web};
 use serde::{Deserialize, Serialize};
-use service::{CONTAINER_MAP, Service};
-use crate::handlers::function_get::get_function;
-use std::sync::Arc;
+use service::containerd_manager::ContainerdManager;
 
-pub async fn delete_handler(
-    service: web::Data<Arc<Service>>,
-    info: web::Json<DeleteContainerInfo>,
-) -> impl Responder {
+pub async fn delete_handler(info: web::Json<DeleteContainerInfo>) -> impl Responder {
     let function_name = info.function_name.clone();
     let namespace = info
         .namespace
         .clone()
         .unwrap_or_else(|| consts::DEFAULT_FUNCTION_NAMESPACE.to_string());
 
-    match delete(&function_name, &namespace, &service).await {
+    match delete(&function_name, &namespace).await {
         Ok(()) => {
             HttpResponse::Ok().body(format!("function {} deleted successfully", function_name))
         }
@@ -26,22 +21,22 @@ pub async fn delete_handler(
     }
 }
 
-async fn delete(
-    function_name: &str,
-    namespace: &str,
-    service: &Arc<Service>,
-) -> Result<(), CustomError> {
-    let namespaces = service.list_namespaces().await.map_err(map_service_error)?;
+async fn delete(function_name: &str, namespace: &str) -> Result<(), CustomError> {
+    let namespaces = ContainerdManager::list_namespaces().await.unwrap();
     if !namespaces.contains(&namespace.to_string()) {
         return Err(CustomError::ActixError(error::ErrorBadRequest(format!(
             "Namespace '{}' not valid or does not exist",
             namespace
         ))));
     }
-    CONTAINER_MAP.write().unwrap().remove(function_name);
-    /*let function = get_function(service, function_name, namespace).await?;
+    let function = get_function(function_name, namespace).await.map_err(|e| {
+        log::error!("Failed to get function: {}", e);
+        CustomError::ActixError(error::ErrorNotFound(format!(
+            "Function '{}' not found in namespace '{}'",
+            function_name, namespace
+        )))
+    })?;
     if function.replicas != 0 {
-
         log::info!("function.replicas: {:?}", function.replicas);
         cni::delete_cni_network(namespace, function_name);
         log::info!("delete_cni_network ok");
@@ -49,10 +44,15 @@ async fn delete(
     } else {
         log::info!("function.replicas: {:?}", function.replicas);
     }
-    service
-        .remove_container(function_name, namespace)
+    ContainerdManager::delete_container(function_name, namespace)
         .await
-        .map_err(map_service_error)?;*/
+        .map_err(|e| {
+            log::error!("Failed to delete container: {}", e);
+            CustomError::ActixError(error::ErrorInternalServerError(format!(
+                "Failed to delete container: {}",
+                e
+            )))
+        })?;
     Ok(())
 }
 
