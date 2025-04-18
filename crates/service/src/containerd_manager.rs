@@ -474,31 +474,31 @@ impl ContainerdManager {
         })?;
         let ports = ImageManager::get_runtime_config(image_name).unwrap().ports;
         let network_config = NetworkConfig::new(ip, ports);
-        Self::save_container_network_config(cid, network_config);
+        Self::save_container_network_config(cid, ns, network_config);
         Ok(())
     }
 
     /// 删除cni网络，删除全局map中的网络配置
     fn remove_cni_network(cid: &str, ns: &str) -> Result<(), ContainerdError> {
         cni::delete_cni_network(ns, cid);
-        Self::remove_container_network_config(cid);
+        Self::remove_container_network_config(cid, ns);
         Ok(())
     }
 
-    fn save_container_network_config(cid: &str, net_conf: NetworkConfig) {
+    fn save_container_network_config(cid: &str, ns: &str, net_conf: NetworkConfig) {
         let mut map = GLOBAL_NETNS_MAP.write().unwrap();
-        map.insert(cid.to_string(), net_conf);
+        map.insert((cid.to_string(), ns.to_string()), net_conf);
     }
 
-    pub fn get_address(cid: &str) -> String {
+    pub fn get_address(cid: &str, ns: &str) -> String {
         let map = GLOBAL_NETNS_MAP.read().unwrap();
-        let addr = map.get(cid).map(|net_conf| net_conf.get_address());
+        let addr = map.get(&(cid.to_string(), ns.to_string())).map(|net_conf| net_conf.get_address());
         addr.unwrap_or_default()
     }
 
-    fn remove_container_network_config(cid: &str) {
+    fn remove_container_network_config(cid: &str, ns: &str) {
         let mut map = GLOBAL_NETNS_MAP.write().unwrap();
-        map.remove(cid);
+        map.remove(&(cid.to_string(), ns.to_string()));
     }
 
     pub async fn list_namespaces() -> Result<Vec<String>, ContainerdError> {
