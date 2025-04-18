@@ -5,9 +5,15 @@ use provider::{
     proxy::proxy_handler::proxy_handler,
     types::config::FaaSConfig,
 };
-
+use actix_web::Responder;
+use actix_web::HttpResponse;
 use service::containerd_manager::{ContainerdManager,CtrInstance};
 
+
+async fn panic()  -> impl Responder {
+    panic!("test panic");
+    HttpResponse::Ok().body("Hey there!")
+}
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -29,6 +35,7 @@ async fn main() -> std::io::Result<()> {
             .route("/system/functions", web::post().to(deploy_handler))
             .route("/system/functions", web::delete().to(delete_handler))
             .route("/function/{name}{path:/?.*}", web::to(proxy_handler))
+            .route("/panic",web::get().to(panic))
         // 更多路由配置...
     })
     .bind("0.0.0.0:8090")?;

@@ -1,6 +1,7 @@
 
 use std::{collections::HashMap, fs, panic, sync::{Arc, RwLock}};
 
+use cni::delete_cni_network;
 use containerd_client::{
     Client,
     services::v1::{
@@ -61,6 +62,7 @@ impl Drop for CtrInstance {
     fn drop(&mut self) {
         let cid = self.cid.clone();
         let ns =self.ns.clone();
+        delete_cni_network(ns.as_str(), cid.as_str());
         let join = tokio::spawn(async move {
             let result = Self::delete_container(cid.as_str(), ns.as_str())
             .await;

@@ -56,9 +56,19 @@ async fn deploy(config: &FunctionDeployment,containerd_manager:Data<ContainerdMa
         .map_err(CustomError::from)?;
     log::info!("Image '{}' validated ,", &config.image);
 
-    let ctr = CtrInstance::new(String::from(&config.service), String::from(&config.image), String::from(&namespace))
+    let mut ctr = CtrInstance::new(String::from(&config.service), String::from(&config.image), String::from(&namespace))
         .await
         .map_err(|e| CustomError::OtherError(format!("failed to create container:{}", e)))?;
+
+        CtrInstance::create_and_start_task(&mut ctr)
+        .await
+        .map_err(|e| {
+            CustomError::OtherError(format!(
+                "failed to start task for container {},{}",
+                &config.service, e
+            ))
+        })?;
+
     containerd_manager.get_ref()
     .insert_to_manager((String::from(&namespace),String::from(&config.service)), ctr);
     log::info!(
@@ -68,15 +78,7 @@ async fn deploy(config: &FunctionDeployment,containerd_manager:Data<ContainerdMa
         namespace
     );
 
-    CtrInstance::new_task(&config.service, &namespace, &config.image)
-        .await
-        .map_err(|e| {
-            CustomError::OtherError(format!(
-                "failed to start task for container {},{}",
-                &config.service, e
-            ))
-        })?;
-
+   
     
     log::info!(
         "Task for container {} was created successfully",
