@@ -392,11 +392,11 @@ impl ImageManager {
                 let ports = config
                     .exposed_ports()
                     .clone()
-                    .expect("Failed to get exposed ports");
+                    .unwrap_or_else(|| vec!["8080/tcp".to_string()]);
                 let cwd = config
                     .working_dir()
                     .clone()
-                    .expect("Failed to get working dir");
+                    .unwrap_or_else(|| "/".to_string());
                 Ok(ImageRuntimeConfig::new(env, args, ports, cwd))
             } else {
                 Err(ImageError::ImageConfigurationNotFound(format!(
