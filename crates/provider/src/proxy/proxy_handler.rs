@@ -24,7 +24,7 @@ pub async fn proxy_handler(
         | Method::HEAD
         | Method::OPTIONS => match proxy_request(&req, payload, &proxy_client).await {
             Ok(resp) => resp,
-            Err(e) => HttpResponse::InternalServerError().body(e.to_string()),
+            Err(e) => HttpResponse::from_error(e),
         },
         _ => HttpResponse::MethodNotAllowed().body("method not allowed"),
     }
