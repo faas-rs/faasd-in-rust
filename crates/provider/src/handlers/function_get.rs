@@ -23,7 +23,7 @@ impl From<Box<dyn std::error::Error>> for FunctionError {
 
 pub async fn get_function(function_name: &str, namespace: &str) -> Result<Function, FunctionError> {
     let cid = function_name;
-    let address = ContainerdManager::get_address(cid);
+    let address = ContainerdManager::get_address(cid, namespace);
 
     let container = ContainerdManager::load_container(cid, namespace)
         .await
