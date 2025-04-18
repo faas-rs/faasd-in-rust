@@ -5,7 +5,7 @@ use crate::{
 };
 use actix_web::{HttpResponse, Responder, web};
 use actix_web::web::Data;
-use service::{containerd_manager::{self, ContainerdManager, CtrInstance}, image_manager::ImageManager};
+use service::{containerd_manager::{ContainerdManager, CtrInstance}, image_manager::ImageManager};
 
 pub async fn deploy_handler(info: web::Json<DeployFunctionInfo> , containerd_manager: web::Data<ContainerdManager>) -> impl Responder {
     let image = info.image.clone();

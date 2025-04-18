@@ -18,7 +18,7 @@ use containerd_client::{
 use prost_types::Any;
 use sha2::{Digest, Sha256};
 use tokio::{
-    runtime::Handle, sync::OnceCell, time::{timeout, Duration}
+    sync::OnceCell, time::{timeout, Duration}
 };
 
 use crate::{NetworkConfig, image_manager::ImageManager, spec::generate_spec};
@@ -51,7 +51,7 @@ impl CtrInstance {
     }
     pub fn get_net_config(&self)->Option<&NetworkConfig>{
         if let Some(net_config) = &self.net{
-            Some(&net_config)
+            Some(net_config)
         } else {
             None
         }
@@ -73,6 +73,12 @@ impl Drop for CtrInstance {
 pub struct ContainerdManager{
     containerdmanager: Arc<RwLock<HashMap<(String,String),CtrInstance>>>
 }
+impl Default for ContainerdManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ContainerdManager{
     pub fn new()->Self {
         ContainerdManager { containerdmanager: Arc::new(RwLock::new(HashMap::new())) }
@@ -94,7 +100,7 @@ impl ContainerdManager{
         read()
         .unwrap();
         let ctr = ctr_map.get(&ns_cid);
-        String::from(ctr.unwrap().get_net_config().unwrap().get_address())
+        ctr.unwrap().get_net_config().unwrap().get_address()
     }
     pub fn get_self(self) -> Arc<RwLock<HashMap<(String,String),CtrInstance>>>{
         self.containerdmanager

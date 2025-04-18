@@ -4,7 +4,7 @@ use crate::{
 };
 use actix_web::{HttpResponse, Responder, ResponseError, error, web};
 use serde::{Deserialize, Serialize};
-use service::containerd_manager::{self, ContainerdManager, CtrInstance};
+use service::containerd_manager::{ContainerdManager, CtrInstance};
 
 pub async fn delete_handler(info: web::Json<DeleteContainerInfo>,containerd_manager: web::Data<ContainerdManager>) -> impl Responder {
     let function_name = info.function_name.clone();

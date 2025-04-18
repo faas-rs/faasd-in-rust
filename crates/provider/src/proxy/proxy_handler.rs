@@ -1,5 +1,5 @@
 use futures::StreamExt;
-use service::containerd_manager::{self, CtrInstance,ContainerdManager};
+use service::containerd_manager::{ContainerdManager};
 use std::time::Duration;
 
 use actix_web::{Error, HttpRequest, HttpResponse, Responder, http::Method, web};

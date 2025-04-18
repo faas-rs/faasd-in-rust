@@ -2,7 +2,7 @@ use crate::consts::DEFAULT_FUNCTION_NAMESPACE;
 use crate::handlers::function_get::get_function;
 use actix_web::{Error, error::ErrorInternalServerError};
 use log;
-use service::containerd_manager::{self, ContainerdManager};
+use service::containerd_manager::{ContainerdManager};
 use url::Url;
 
 #[derive(Clone)]
@@ -19,7 +19,7 @@ impl InvokeResolver {
         //     actual_function_name = function_name.trim_end_matches(&format!(".{}", namespace));
         // }
 
-        let function = match get_function(function_name, &namespace,&containerd_manager).await {
+        let function = match get_function(function_name, &namespace,containerd_manager).await {
             Ok(function) => function,
             Err(e) => {
                 log::error!("Failed to get function:{}", e);

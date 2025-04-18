@@ -4,12 +4,7 @@ pub mod spec;
 pub mod systemd;
 
 
-use cni::delete_cni_network;
 
-use std::{
-    collections::HashMap,
-    sync::{Arc, RwLock},
-};
 
 // config.json,dockerhub密钥
 // const DOCKER_CONFIG_DIR: &str = "/var/lib/faasd/.docker/";
