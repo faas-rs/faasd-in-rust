@@ -96,6 +96,9 @@ impl ContainerdManager{
         let ctr = ctr_map.get(&ns_cid);
         String::from(ctr.unwrap().get_net_config().unwrap().get_address())
     }
+    pub fn get_self(self) -> Arc<RwLock<HashMap<(String,String),CtrInstance>>>{
+        self.containerdmanager
+    }
 }
 impl CtrInstance {
     pub async fn init(socket_path: &str) {
