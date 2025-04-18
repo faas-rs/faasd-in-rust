@@ -66,8 +66,8 @@ impl Drop for CtrInstance {
         let cid = self.cid.clone();
         let ns = self.ns.clone();
         delete_cni_network(ns.as_str(), cid.as_str());
-        let join = tokio::spawn(async move {
-            let result = Self::delete_container(cid.as_str(), ns.as_str()).await;
+        let _join = tokio::spawn(async move {
+            let _result = Self::delete_container(cid.as_str(), ns.as_str()).await;
         });
     }
 }
