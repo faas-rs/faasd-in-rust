@@ -14,10 +14,7 @@ use std::{
 // config.json,dockerhub密钥
 // const DOCKER_CONFIG_DIR: &str = "/var/lib/faasd/.docker/";
 
-type NetnsMap = Arc<RwLock<HashMap<String, NetworkConfig>>>;
-lazy_static::lazy_static! {
-    static ref GLOBAL_NETNS_MAP: NetnsMap = Arc::new(RwLock::new(HashMap::new()));
-}
+
 
 #[derive(Debug, Clone)]
 pub struct NetworkConfig {

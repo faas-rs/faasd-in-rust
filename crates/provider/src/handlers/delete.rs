@@ -29,7 +29,7 @@ async fn delete(function_name: &str, namespace: &str,containerd_manager:&Contain
             namespace
         ))));
     }
-    let function = get_function(function_name, namespace).await.map_err(|e| {
+    let function = get_function(function_name, namespace,containerd_manager).await.map_err(|e| {
         log::error!("Failed to get function: {}", e);
         CustomError::ActixError(error::ErrorNotFound(format!(
             "Function '{}' not found in namespace '{}'",

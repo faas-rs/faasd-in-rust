@@ -1,7 +1,7 @@
 use crate::handlers::function_list::Function;
 // use service::spec::{ Mount, Spec};
 use actix_web::cookie::time::Duration;
-use service::{containerd_manager::CtrInstance, image_manager::ImageManager};
+use service::{containerd_manager::{self, CtrInstance,ContainerdManager}, image_manager::ImageManager};
 use std::{collections::HashMap, time::UNIX_EPOCH};
 use thiserror::Error;
 
@@ -21,9 +21,9 @@ impl From<Box<dyn std::error::Error>> for FunctionError {
     }
 }
 
-pub async fn get_function(function_name: &str, namespace: &str) -> Result<Function, FunctionError> {
+pub async fn get_function(function_name: &str, namespace: &str,containerd_manager:&ContainerdManager) -> Result<Function, FunctionError> {
     let cid = function_name;
-    let address = CtrInstance::get_address(cid);
+    let address = containerd_manager.get_network_address((String::from(namespace),String::from(function_name)));
 
     let container = CtrInstance::load_container(cid, namespace)
         .await

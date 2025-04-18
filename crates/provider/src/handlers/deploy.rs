@@ -56,7 +56,7 @@ async fn deploy(config: &FunctionDeployment,containerd_manager:Data<ContainerdMa
         .map_err(CustomError::from)?;
     log::info!("Image '{}' validated ,", &config.image);
 
-    let ctr = CtrInstance::new(String::from(&config.image), String::from(&config.service), String::from(&namespace))
+    let ctr = CtrInstance::new(String::from(&config.service), String::from(&config.image), String::from(&namespace))
         .await
         .map_err(|e| CustomError::OtherError(format!("failed to create container:{}", e)))?;
     containerd_manager.get_ref()

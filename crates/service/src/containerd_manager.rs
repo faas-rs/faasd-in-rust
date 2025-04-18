@@ -20,7 +20,7 @@ use tokio::{
     runtime::Handle, sync::OnceCell, time::{timeout, Duration}
 };
 
-use crate::{GLOBAL_NETNS_MAP, NetworkConfig, image_manager::ImageManager, spec::generate_spec};
+use crate::{NetworkConfig, image_manager::ImageManager, spec::generate_spec};
 
 pub(super) static CLIENT: OnceCell<Arc<Client>> = OnceCell::const_new();
 
@@ -47,6 +47,13 @@ impl CtrInstance {
         .await?;
         self.net = Some(network_config);
         Ok(())
+    }
+    pub fn get_net_config(&self)->Option<&NetworkConfig>{
+        if let Some(net_config) = &self.net{
+            Some(&net_config)
+        } else {
+            None
+        }
     }
 }
 
@@ -79,6 +86,13 @@ impl ContainerdManager{
         .write()
         .unwrap()
         .remove(&ns_cid);
+    }
+    pub fn get_network_address(&self,ns_cid:(String,String)) ->String{
+        let ctr_map = self.containerdmanager.
+        read()
+        .unwrap();
+        let ctr = ctr_map.get(&ns_cid);
+        String::from(ctr.unwrap().get_net_config().unwrap().get_address())
     }
 }
 impl CtrInstance {
@@ -164,10 +178,10 @@ impl CtrInstance {
 
         Self::do_delete_container(cid, ns).await?;
 
-        Self::remove_cni_network(cid, ns).map_err(|e| {
+        /*Self::remove_cni_network(cid, ns).map_err(|e| {
             log::error!("Failed to remove CNI network: {}", e);
             ContainerdError::CreateTaskError(e.to_string())
-        })?;
+        })?;*/
         Ok(())
     }
 
@@ -530,7 +544,7 @@ impl CtrInstance {
         //Self::save_container_network_config(cid, network_config);
         Ok(network_config)
     }
-
+    /* 
     /// 删除cni网络，删除全局map中的网络配置
     fn remove_cni_network(cid: &str, ns: &str) -> Result<(), ContainerdError> {
         cni::delete_cni_network(ns, cid);
@@ -553,7 +567,7 @@ impl CtrInstance {
         let mut map = GLOBAL_NETNS_MAP.write().unwrap();
         map.remove(cid);
     }
-
+    */
     pub async fn list_namespaces() -> Result<Vec<String>, ContainerdError> {
         let mut c = Self::get_client().await.namespaces();
         let req = ListNamespacesRequest {
