@@ -3,13 +3,8 @@ pub mod image_manager;
 pub mod spec;
 pub mod systemd;
 
-
-
-
 // config.json,dockerhub密钥
 // const DOCKER_CONFIG_DIR: &str = "/var/lib/faasd/.docker/";
-
-
 
 #[derive(Debug, Clone)]
 pub struct NetworkConfig {
@@ -33,16 +28,7 @@ impl NetworkConfig {
             self.ports[0].split('/').next().unwrap_or("")
         )
     }
-
 }
 impl Drop for NetworkConfig {
-    fn drop(&mut self) {
-        
-    }
+    fn drop(&mut self) {}
 }
-
-
-
-
-
-
