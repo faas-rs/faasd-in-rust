@@ -389,14 +389,14 @@ impl ImageManager {
                     .cmd()
                     .clone()
                     .expect("Failed to get command arguments");
-                let ports = config
-                    .exposed_ports()
-                    .clone()
-                    .expect("Failed to get exposed ports");
-                let cwd = config
-                    .working_dir()
-                    .clone()
-                    .expect("Failed to get working dir");
+                let ports = config.exposed_ports().clone().unwrap_or_else(|| {
+                    log::warn!("Exposed ports not found, using default port 8080/tcp");
+                    vec!["8080/tcp".to_string()]
+                });
+                let cwd = config.working_dir().clone().unwrap_or_else(|| {
+                    log::warn!("Working directory not found, using default /");
+                    "/".to_string()
+                });
                 Ok(ImageRuntimeConfig::new(env, args, ports, cwd))
             } else {
                 Err(ImageError::ImageConfigurationNotFound(format!(
