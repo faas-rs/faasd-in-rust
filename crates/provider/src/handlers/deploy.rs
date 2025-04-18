@@ -4,10 +4,10 @@ use crate::{
     types::function_deployment::{DeployFunctionInfo, FunctionDeployment},
 };
 use actix_web::{HttpResponse, Responder, web};
+use actix_web::web::Data;
+use service::{containerd_manager::{self, ContainerdManager, CtrInstance}, image_manager::ImageManager};
 
-use service::{containerd_manager::ContainerdManager, image_manager::ImageManager};
-
-pub async fn deploy_handler(info: web::Json<DeployFunctionInfo>) -> impl Responder {
+pub async fn deploy_handler(info: web::Json<DeployFunctionInfo> , containerd_manager: web::Data<ContainerdManager>) -> impl Responder {
     let image = info.image.clone();
     let function_name = info.function_name.clone();
     let namespace = info
@@ -21,7 +21,7 @@ pub async fn deploy_handler(info: web::Json<DeployFunctionInfo>) -> impl Respond
         namespace: Some(namespace),
     };
 
-    match deploy(&config).await {
+    match deploy(&config,containerd_manager).await {
         Ok(()) => HttpResponse::Accepted().body(format!(
             "Function {} deployment initiated successfully .",
             config.service
@@ -33,7 +33,7 @@ pub async fn deploy_handler(info: web::Json<DeployFunctionInfo>) -> impl Respond
     }
 }
 
-async fn deploy(config: &FunctionDeployment) -> Result<(), CustomError> {
+async fn deploy(config: &FunctionDeployment,containerd_manager:Data<ContainerdManager>) -> Result<(), CustomError> {
     let namespace = config.namespace.clone().unwrap();
 
     log::info!(
@@ -41,7 +41,7 @@ async fn deploy(config: &FunctionDeployment) -> Result<(), CustomError> {
         config.namespace.clone().unwrap()
     );
 
-    let container_list = ContainerdManager::list_container_into_string(&namespace)
+    let container_list = CtrInstance::list_container_into_string(&namespace)
         .await
         .map_err(|e| CustomError::OtherError(format!("failed to list container:{}", e)))?;
 
@@ -56,10 +56,11 @@ async fn deploy(config: &FunctionDeployment) -> Result<(), CustomError> {
         .map_err(CustomError::from)?;
     log::info!("Image '{}' validated ,", &config.image);
 
-    ContainerdManager::create_container(&config.image, &config.service, &namespace)
+    let ctr = CtrInstance::new(String::from(&config.image), String::from(&config.service), String::from(&namespace))
         .await
         .map_err(|e| CustomError::OtherError(format!("failed to create container:{}", e)))?;
-
+    containerd_manager.get_ref()
+    .insert_to_manager((String::from(&namespace),String::from(&config.service)), ctr);
     log::info!(
         "Container {} created using image {} in namespace {}",
         &config.service,
@@ -67,7 +68,7 @@ async fn deploy(config: &FunctionDeployment) -> Result<(), CustomError> {
         namespace
     );
 
-    ContainerdManager::new_task(&config.service, &namespace, &config.image)
+    CtrInstance::new_task(&config.service, &namespace, &config.image)
         .await
         .map_err(|e| {
             CustomError::OtherError(format!(
@@ -76,15 +77,6 @@ async fn deploy(config: &FunctionDeployment) -> Result<(), CustomError> {
             ))
         })?;
 
-    /*service
-    .create_and_start_task(&config.service, &namespace, &config.image)
-    .await
-    .map_err(|e| {
-        CustomError::OtherError(format!(
-            "failed to start task for container {},{}",
-            &config.service, e
-        ))
-    })?;*/
     
     log::info!(
         "Task for container {} was created successfully",

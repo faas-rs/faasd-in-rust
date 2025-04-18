@@ -1,4 +1,4 @@
-use core::hash;
+
 use std::{collections::HashMap, fs, panic, sync::{Arc, RwLock}};
 
 use containerd_client::{
@@ -17,8 +17,7 @@ use containerd_client::{
 use prost_types::Any;
 use sha2::{Digest, Sha256};
 use tokio::{
-    sync::OnceCell,
-    time::{Duration, timeout},
+    runtime::Handle, sync::OnceCell, time::{timeout, Duration}
 };
 
 use crate::{GLOBAL_NETNS_MAP, NetworkConfig, image_manager::ImageManager, spec::generate_spec};
@@ -38,12 +37,12 @@ impl CtrInstance {
         cid: String,
         image: String,
         ns: String,
-    ) -> Result<Self, Err> {
+    ) -> Result<Self, ContainerdError> {
         Self::create_container(image.as_str(), cid.as_str(), ns.as_str())
         .await?;
         Ok(CtrInstance { cid, image, ns, net: None })
     }
-    pub async fn create_and_start_task(&mut self) -> Result<(), Err> {
+    pub async fn create_and_start_task(&mut self) -> Result<(), ContainerdError> {
         let network_config = Self::new_task(&self.cid, &self.ns, &self.image)
         .await?;
         self.net = Some(network_config);
@@ -57,14 +56,31 @@ impl Drop for CtrInstance {
         let ns =self.ns.clone();
         let join = tokio::spawn(async move {
             let result = Self::delete_container(cid.as_str(), ns.as_str())
-            .await?;
+            .await;
         });
     }
 }
+#[derive(Debug, Clone)]
 pub struct ContainerdManager{
-    containerdmanager: Arc<RwLock<HashMap<String,CtrInstance>>>
+    containerdmanager: Arc<RwLock<HashMap<(String,String),CtrInstance>>>
 }
-
+impl ContainerdManager{
+    pub fn new()->Self {
+        ContainerdManager { containerdmanager: Arc::new(RwLock::new(HashMap::new())) }
+    }
+    pub fn insert_to_manager(&self,ns_cid:(String,String),ctr:CtrInstance){
+        self.containerdmanager
+        .write()
+        .unwrap()
+        .insert(ns_cid, ctr);
+    }
+    pub fn remove_from_manager(&self,ns_cid:(String,String)){
+        self.containerdmanager
+        .write()
+        .unwrap()
+        .remove(&ns_cid);
+    }
+}
 impl CtrInstance {
     pub async fn init(socket_path: &str) {
         if let Err(e) = CLIENT.set(Arc::new(Client::from_path(socket_path).await.unwrap())) {

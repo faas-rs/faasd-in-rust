@@ -1,7 +1,7 @@
 use crate::handlers::function_list::Function;
 // use service::spec::{ Mount, Spec};
 use actix_web::cookie::time::Duration;
-use service::{containerd_manager::ContainerdManager, image_manager::ImageManager};
+use service::{containerd_manager::CtrInstance, image_manager::ImageManager};
 use std::{collections::HashMap, time::UNIX_EPOCH};
 use thiserror::Error;
 
@@ -23,9 +23,9 @@ impl From<Box<dyn std::error::Error>> for FunctionError {
 
 pub async fn get_function(function_name: &str, namespace: &str) -> Result<Function, FunctionError> {
     let cid = function_name;
-    let address = ContainerdManager::get_address(cid);
+    let address = CtrInstance::get_address(cid);
 
-    let container = ContainerdManager::load_container(cid, namespace)
+    let container = CtrInstance::load_container(cid, namespace)
         .await
         .map_err(|e| FunctionError::FunctionNotFound(e.to_string()))?
         .unwrap();
@@ -48,7 +48,7 @@ pub async fn get_function(function_name: &str, namespace: &str) -> Result<Functi
     let timestamp = container.created_at.unwrap_or_default();
     let created_at = UNIX_EPOCH + Duration::new(timestamp.seconds, timestamp.nanos);
 
-    let task = ContainerdManager::get_task(cid, namespace)
+    let task = CtrInstance::get_task(cid, namespace)
         .await
         .map_err(|e| FunctionError::FunctionNotFound(e.to_string()));
     match task {

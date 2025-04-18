@@ -1,14 +1,12 @@
 use actix_web::{App, HttpServer, web};
 
-use service::Service;
-
 use provider::{
     handlers::{delete::delete_handler, deploy::deploy_handler},
     proxy::proxy_handler::proxy_handler,
     types::config::FaaSConfig,
 };
 
-use service::containerd_manager::ContainerdManager;
+use service::containerd_manager::{ContainerdManager,CtrInstance};
 
 
 #[actix_web::main]
@@ -17,8 +15,8 @@ async fn main() -> std::io::Result<()> {
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
     let socket_path = std::env::var("SOCKET_PATH")
         .unwrap_or_else(|_| "/run/containerd/containerd.sock".to_string());
-    ContainerdManager::init(&socket_path).await;
-
+    CtrInstance::init(&socket_path).await;
+    let containerdmanager = ContainerdManager::new();
     let faas_config = FaaSConfig::new();
 
 
@@ -27,6 +25,7 @@ async fn main() -> std::io::Result<()> {
     let server = HttpServer::new(move || {
         App::new()
             .app_data(web::Data::new(faas_config.clone()))
+            .app_data(web::Data::new(containerdmanager.clone()))
             .route("/system/functions", web::post().to(deploy_handler))
             .route("/system/functions", web::delete().to(delete_handler))
             .route("/function/{name}{path:/?.*}", web::to(proxy_handler))

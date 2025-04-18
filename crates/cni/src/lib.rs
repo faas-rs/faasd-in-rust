@@ -1,4 +1,4 @@
-type Err = Box<dyn std::error::Error+Send+Sync>;
+type Err = Box<dyn std::error::Error>;
 
 use lazy_static::lazy_static;
 use serde_json::Value;
