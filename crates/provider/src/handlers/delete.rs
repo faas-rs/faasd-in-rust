@@ -36,7 +36,7 @@ async fn delete(
             namespace
         ))));
     }
-    let function = get_function(function_name, namespace, containerd_manager)
+    let _function = get_function(function_name, namespace, containerd_manager)
         .await
         .map_err(|e| {
             log::error!("Failed to get function: {}", e);
