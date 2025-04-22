@@ -28,7 +28,7 @@ pub async fn get_function(function_name: &str, namespace: &str) -> Result<Functi
     let container = ContainerdManager::load_container(cid, namespace)
         .await
         .map_err(|e| FunctionError::FunctionNotFound(e.to_string()))?
-        .unwrap();
+        .unwrap_or_default();
 
     let container_name = container.id.to_string();
     let image = container.image.clone();

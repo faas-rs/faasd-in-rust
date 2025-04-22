@@ -492,8 +492,8 @@ impl ContainerdManager {
 
     pub fn get_address(cid: &str) -> String {
         let map = GLOBAL_NETNS_MAP.read().unwrap();
-        let config = map.get(cid).unwrap();
-        config.get_address()
+        let addr = map.get(cid).map(|net_conf| net_conf.get_address());
+        addr.unwrap_or_default()
     }
 
     fn remove_container_network_config(cid: &str) {
