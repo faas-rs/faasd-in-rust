@@ -1,7 +1,7 @@
 use crate::handlers::function_list::Function;
 // use service::spec::{ Mount, Spec};
 use actix_web::cookie::time::Duration;
-use service::{containerd_manager::ContainerdManager, image_manager::ImageManager};
+use service::{FunctionScope, containerd_manager::ContainerdManager, image_manager::ImageManager};
 use std::{collections::HashMap, time::UNIX_EPOCH};
 use thiserror::Error;
 
@@ -23,7 +23,11 @@ impl From<Box<dyn std::error::Error>> for FunctionError {
 
 pub async fn get_function(function_name: &str, namespace: &str) -> Result<Function, FunctionError> {
     let cid = function_name;
-    let address = ContainerdManager::get_address(cid, namespace);
+    let function = FunctionScope {
+        function_name: cid.to_string(),
+        namespace: namespace.to_string(),
+    };
+    let address = ContainerdManager::get_address(&function);
 
     let container = ContainerdManager::load_container(cid, namespace)
         .await

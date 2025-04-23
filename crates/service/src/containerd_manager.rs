@@ -20,7 +20,10 @@ use tokio::{
     time::{Duration, timeout},
 };
 
-use crate::{GLOBAL_NETNS_MAP, NetworkConfig, image_manager::ImageManager, spec::generate_spec};
+use crate::{
+    FunctionScope, GLOBAL_NETNS_MAP, NetworkConfig, image_manager::ImageManager,
+    spec::generate_spec,
+};
 
 pub(super) static CLIENT: OnceCell<Arc<Client>> = OnceCell::const_new();
 
@@ -474,31 +477,39 @@ impl ContainerdManager {
         })?;
         let ports = ImageManager::get_runtime_config(image_name).unwrap().ports;
         let network_config = NetworkConfig::new(ip, ports);
-        Self::save_container_network_config(cid, ns, network_config);
+        let function = FunctionScope {
+            function_name: cid.to_string(),
+            namespace: ns.to_string(),
+        };
+        Self::save_container_network_config(function, network_config);
         Ok(())
     }
 
     /// 删除cni网络，删除全局map中的网络配置
     fn remove_cni_network(cid: &str, ns: &str) -> Result<(), ContainerdError> {
         cni::delete_cni_network(ns, cid);
-        Self::remove_container_network_config(cid, ns);
+        let function = FunctionScope {
+            function_name: cid.to_string(),
+            namespace: ns.to_string(),
+        };
+        Self::remove_container_network_config(&function);
         Ok(())
     }
 
-    fn save_container_network_config(cid: &str, ns: &str, net_conf: NetworkConfig) {
+    fn save_container_network_config(function: FunctionScope, net_conf: NetworkConfig) {
         let mut map = GLOBAL_NETNS_MAP.write().unwrap();
-        map.insert((cid.to_string(), ns.to_string()), net_conf);
+        map.insert(function, net_conf);
     }
 
-    pub fn get_address(cid: &str, ns: &str) -> String {
+    pub fn get_address(function: &FunctionScope) -> String {
         let map = GLOBAL_NETNS_MAP.read().unwrap();
-        let addr = map.get(&(cid.to_string(), ns.to_string())).map(|net_conf| net_conf.get_address());
+        let addr = map.get(function).map(|net_conf| net_conf.get_address());
         addr.unwrap_or_default()
     }
 
-    fn remove_container_network_config(cid: &str, ns: &str) {
+    fn remove_container_network_config(function: &FunctionScope) {
         let mut map = GLOBAL_NETNS_MAP.write().unwrap();
-        map.remove(&(cid.to_string(), ns.to_string()));
+        map.remove(function);
     }
 
     pub async fn list_namespaces() -> Result<Vec<String>, ContainerdError> {
