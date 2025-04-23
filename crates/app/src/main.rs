@@ -7,11 +7,9 @@ use provider::{
     types::config::FaaSConfig,
 };
 use service::containerd_manager::{ContainerdManager, CtrInstance};
-use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
-use std::sync::atomic::Ordering;
-use tokio::time::Duration;
-use tokio::time::sleep;
+use std::sync::{Arc,atomic::{AtomicBool,Ordering}};
+use tokio::time::{Duration,sleep};
+
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -20,8 +18,8 @@ async fn main() -> std::io::Result<()> {
     let socket_path = std::env::var("SOCKET_PATH")
         .unwrap_or_else(|_| "/run/containerd/containerd.sock".to_string());
     CtrInstance::init(&socket_path).await;
-    let containerdmanager = ContainerdManager::new();
-    let containerdmanager_clone = containerdmanager.clone();
+    let ctr_instance_map = ContainerdManager::new();
+    let ctr_instance_map_clone = ctr_instance_map.clone();
     let faas_config = FaaSConfig::new();
 
     log::info!("I'm running!");
@@ -29,7 +27,7 @@ async fn main() -> std::io::Result<()> {
     let server = HttpServer::new(move || {
         App::new()
             .app_data(web::Data::new(faas_config.clone()))
-            .app_data(web::Data::new(containerdmanager.clone()))
+            .app_data(web::Data::new(ctr_instance_map.clone()))
             .route("/system/functions", web::post().to(deploy_handler))
             .route("/system/functions", web::delete().to(delete_handler))
             .route("/function/{name}{path:/?.*}", web::to(proxy_handler))
@@ -52,7 +50,7 @@ async fn main() -> std::io::Result<()> {
     let shutdown = tokio::spawn(async move {
         // listen for ctrl-c
         tokio::signal::ctrl_c().await.unwrap();
-        containerdmanager_clone.get_self().write().unwrap().clear();
+        ctr_instance_map_clone.get_self().write().unwrap().clear();
         sleep(Duration::from_secs(3)).await;
         // start shutdown of tasks
         let server_stop = server_handle.stop(true);
