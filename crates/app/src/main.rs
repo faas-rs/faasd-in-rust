@@ -7,9 +7,11 @@ use provider::{
     types::config::FaaSConfig,
 };
 use service::containerd_manager::{ContainerdManager, CtrInstance};
-use std::sync::{Arc,atomic::{AtomicBool,Ordering}};
-use tokio::time::{Duration,sleep};
-
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
+use tokio::time::{Duration, sleep};
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
