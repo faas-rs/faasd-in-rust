@@ -72,7 +72,7 @@ impl Drop for CtrInstance {
 }
 #[derive(Debug, Clone)]
 pub struct ContainerdManager {
-    containerdmanager: Arc<RwLock<HashMap<(String, String), CtrInstance>>>,
+    ctr_instance_map: Arc<RwLock<HashMap<(String, String), CtrInstance>>>,
 }
 impl Default for ContainerdManager {
     fn default() -> Self {
@@ -83,22 +83,22 @@ impl Default for ContainerdManager {
 impl ContainerdManager {
     pub fn new() -> Self {
         ContainerdManager {
-            containerdmanager: Arc::new(RwLock::new(HashMap::new())),
+            ctr_instance_map: Arc::new(RwLock::new(HashMap::new())),
         }
     }
     pub fn insert_to_manager(&self, ns_cid: (String, String), ctr: CtrInstance) {
-        self.containerdmanager.write().unwrap().insert(ns_cid, ctr);
+        self.ctr_instance_map.write().unwrap().insert(ns_cid, ctr);
     }
     pub fn remove_from_manager(&self, ns_cid: (String, String)) {
-        self.containerdmanager.write().unwrap().remove(&ns_cid);
+        self.ctr_instance_map.write().unwrap().remove(&ns_cid);
     }
     pub fn get_network_address(&self, ns_cid: (String, String)) -> String {
-        let ctr_map = self.containerdmanager.read().unwrap();
+        let ctr_map = self.ctr_instance_map.read().unwrap();
         let ctr = ctr_map.get(&ns_cid);
         ctr.unwrap().get_net_config().unwrap().get_address()
     }
     pub fn get_self(self) -> Arc<RwLock<HashMap<(String, String), CtrInstance>>> {
-        self.containerdmanager
+        self.ctr_instance_map
     }
 }
 
