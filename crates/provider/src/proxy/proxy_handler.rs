@@ -8,6 +8,7 @@ use actix_web::{
     http::Method,
     web,
 };
+use service::containerd_manager::ContainerdManager;
 
 // 主要参考源码的响应设置
 pub async fn proxy_handler(
@@ -16,6 +17,7 @@ pub async fn proxy_handler(
     payload: web::Payload,
 ) -> Result<HttpResponse, Error> {
     let proxy_client = new_proxy_client_from_config(config.as_ref()).await;
+
     log::info!("proxy_client : {:?}", proxy_client);
 
     match *req.method() {

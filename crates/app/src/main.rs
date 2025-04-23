@@ -6,7 +6,12 @@ use provider::{
     proxy::proxy_handler::proxy_handler,
     types::config::FaaSConfig,
 };
-use service::containerd_manager::ContainerdManager;
+use service::containerd_manager::{ContainerdManager, CtrInstance};
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
+use tokio::time::Duration;
+use tokio::time::sleep;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -14,8 +19,9 @@ async fn main() -> std::io::Result<()> {
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
     let socket_path = std::env::var("SOCKET_PATH")
         .unwrap_or_else(|_| "/run/containerd/containerd.sock".to_string());
-    ContainerdManager::init(&socket_path).await;
-
+    CtrInstance::init(&socket_path).await;
+    let containerdmanager = ContainerdManager::new();
+    let containerdmanager_clone = containerdmanager.clone();
     let faas_config = FaaSConfig::new();
 
     log::info!("I'm running!");
@@ -23,6 +29,7 @@ async fn main() -> std::io::Result<()> {
     let server = HttpServer::new(move || {
         App::new()
             .app_data(web::Data::new(faas_config.clone()))
+            .app_data(web::Data::new(containerdmanager.clone()))
             .route("/system/functions", web::post().to(deploy_handler))
             .route("/system/functions", web::delete().to(delete_handler))
             .route("/function/{name}{path:/?.*}", web::to(proxy_handler))
@@ -32,11 +39,32 @@ async fn main() -> std::io::Result<()> {
             )
         // 更多路由配置...
     })
-    .bind("0.0.0.0:8090")?;
+    .bind("0.0.0.0:8090")?
+    // disable default signal handling
+    .disable_signals()
+    .run();
 
-    log::info!("Running on 0.0.0.0:8090...");
+    let server_handle = server.handle();
+    let task_shutdown_marker = Arc::new(AtomicBool::new(false));
 
-    server.run().await
+    let server_task = tokio::spawn(server);
+
+    let shutdown = tokio::spawn(async move {
+        // listen for ctrl-c
+        tokio::signal::ctrl_c().await.unwrap();
+        containerdmanager_clone.get_self().write().unwrap().clear();
+        sleep(Duration::from_secs(3)).await;
+        // start shutdown of tasks
+        let server_stop = server_handle.stop(true);
+        task_shutdown_marker.store(true, Ordering::SeqCst);
+
+        // await shutdown of tasks
+        server_stop.await;
+    });
+
+    let _ = tokio::try_join!(server_task, shutdown).expect("unable to join tasks");
+
+    Ok(())
 }
 
 // 测试env能够正常获取
