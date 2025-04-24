@@ -1,7 +1,7 @@
 use crate::handlers::function_list::Function;
 // use service::spec::{ Mount, Spec};
 use actix_web::cookie::time::Duration;
-use service::{containerd_manager::ContainerdManager, image_manager::ImageManager};
+use service::{FunctionScope, containerd_manager::ContainerdManager, image_manager::ImageManager};
 use std::{collections::HashMap, time::UNIX_EPOCH};
 use thiserror::Error;
 
