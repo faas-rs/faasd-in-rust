@@ -67,7 +67,7 @@ async fn deploy(config: &FunctionDeployment) -> Result<(), CustomError> {
         namespace
     );
 
-    ContainerdManager::new_task(&config.service, &namespace, &config.image)
+    ContainerdManager::new_task(&config.service, &namespace)
         .await
         .map_err(|e| {
             CustomError::OtherError(format!(

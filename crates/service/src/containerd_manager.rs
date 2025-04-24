@@ -75,6 +75,7 @@ impl ContainerdManager {
         };
 
         Self::do_create_container(container, ns).await?;
+        Self::prepare_cni_network(cid, ns, image_name)?;
 
         Ok(())
     }
@@ -136,9 +137,8 @@ impl ContainerdManager {
     }
 
     /// 创建并启动任务
-    pub async fn new_task(cid: &str, ns: &str, image_name: &str) -> Result<(), ContainerdError> {
+    pub async fn new_task(cid: &str, ns: &str) -> Result<(), ContainerdError> {
         let mounts = Self::get_mounts(cid, ns).await?;
-        Self::prepare_cni_network(cid, ns, image_name)?;
         Self::do_create_task(cid, ns, mounts).await?;
         Self::do_start_task(cid, ns).await?;
         Ok(())
