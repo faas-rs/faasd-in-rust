@@ -8,12 +8,13 @@ use url::Url;
 pub struct InvokeResolver;
 
 impl InvokeResolver {
-    pub async fn resolve(function_name: &str) -> Result<Url, Error> {
+    pub async fn resolve_function_url(function_name: &str) -> Result<Url, Error> {
         //根据函数名和containerd获取函数ip，
         //从函数名称中提取命名空间。如果函数名称中包含 .，则将其后的部分作为命名空间；否则使用默认命名空间
 
         let mut actual_function_name = function_name;
-        let namespace = get_namespace_or_default(function_name, DEFAULT_FUNCTION_NAMESPACE);
+        let namespace =
+            extract_namespace_from_function_or_default(function_name, DEFAULT_FUNCTION_NAMESPACE);
         if function_name.contains('.') {
             actual_function_name = function_name.trim_end_matches(&format!(".{}", namespace));
         }
@@ -39,7 +40,10 @@ impl InvokeResolver {
     }
 }
 
-fn get_namespace_or_default(function_name: &str, default_namespace: &str) -> String {
+fn extract_namespace_from_function_or_default(
+    function_name: &str,
+    default_namespace: &str,
+) -> String {
     let mut namespace = default_namespace.to_string();
     if function_name.contains('.') {
         if let Some(index) = function_name.rfind('.') {
