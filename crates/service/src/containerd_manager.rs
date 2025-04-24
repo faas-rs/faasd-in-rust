@@ -161,6 +161,7 @@ impl ContainerdManager {
         };
 
         Self::do_create_container(container, ns).await?;
+        Self::prepare_cni_network(cid, ns, image_name)?;
 
         Ok(())
     }
