@@ -4,6 +4,7 @@ use crate::proxy::client::new_proxy_client_from_config;
 use crate::types::config::FaaSConfig;
 use actix_web::{Error, HttpRequest, HttpResponse, Responder, http::Method, web};
 
+// 主要参考源码的响应设置
 pub async fn proxy_handler(
     config: web::Data<FaaSConfig>,
     req: HttpRequest,
@@ -43,7 +44,10 @@ async fn proxy_request(
         Err(e) => return Ok(HttpResponse::BadRequest().body(e.to_string())),
     };
 
-    let proxy_req = build_proxy_request(req, &function_addr, proxy_client, payload).await?;
+    let proxy_req = match build_proxy_request(req, &function_addr, proxy_client, payload).await {
+        Ok(proxy_req) => proxy_req,
+        Err(e) => return Ok(HttpResponse::InternalServerError().body(e.to_string())),
+    };
 
     match proxy_req.send().await {
         Ok(resp) => {
@@ -58,6 +62,6 @@ async fn proxy_request(
 
             Ok(client_resp.body(body))
         }
-        Err(e) => Ok(HttpResponse::BadGateway().body(e.to_string())),
+        Err(e) => Ok(HttpResponse::InternalServerError().body(e.to_string())),
     }
 }
