@@ -23,7 +23,7 @@ pub async fn deploy_handler(info: web::Json<DeployFunctionInfo>) -> impl Respond
 
     match deploy(&config).await {
         Ok(()) => HttpResponse::Accepted().body(format!(
-            "Function {} deployment initiated successfully .",
+            "Function {} deployment initiated successfully.",
             config.service
         )),
         Err(e) => HttpResponse::InternalServerError().body(format!(

@@ -15,7 +15,7 @@ pub async fn delete_handler(info: web::Json<DeleteContainerInfo>) -> impl Respon
 
     match delete(&function_name, &namespace).await {
         Ok(()) => {
-            HttpResponse::Ok().body(format!("function {} deleted successfully", function_name))
+            HttpResponse::Ok().body(format!("Function {} deleted successfully.", function_name))
         }
         Err(e) => e.error_response(),
     }
