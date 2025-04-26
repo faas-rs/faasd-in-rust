@@ -18,7 +18,7 @@ pub async fn delete_handler(
 
     match delete(&function_name, &namespace, containerd_manager.get_ref()).await {
         Ok(()) => {
-            HttpResponse::Ok().body(format!("function {} deleted successfully", function_name))
+            HttpResponse::Ok().body(format!("Function {} deleted successfully.", function_name))
         }
         Err(e) => e.error_response(),
     }
