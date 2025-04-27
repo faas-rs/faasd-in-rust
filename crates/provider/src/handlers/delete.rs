@@ -29,7 +29,7 @@ async fn delete(
     namespace: &str,
     containerd_manager: &ContainerdManager,
 ) -> Result<(), CustomError> {
-    let namespaces = CtrInstance::list_namespaces().await.unwrap();
+    let namespaces = ContainerdManager::list_namespaces().await.unwrap();
     if !namespaces.contains(&namespace.to_string()) {
         return Err(CustomError::ActixError(error::ErrorBadRequest(format!(
             "Namespace '{}' not valid or does not exist",
@@ -61,7 +61,7 @@ async fn delete(
                 e
             )))
         })?;*/
-    containerd_manager.remove_from_manager((String::from(namespace), String::from(function_name)));
+    containerd_manager.delete_ctrinstance((String::from(namespace), String::from(function_name)));
     Ok(())
 }
 

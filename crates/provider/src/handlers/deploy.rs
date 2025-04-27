@@ -50,7 +50,7 @@ async fn deploy(
         config.namespace.clone().unwrap()
     );
 
-    let container_list = CtrInstance::list_container_into_string(&namespace)
+    let container_list = ContainerdManager::list_container_into_string(&namespace)
         .await
         .map_err(|e| CustomError::OtherError(format!("failed to list container:{}", e)))?;
 
@@ -65,27 +65,26 @@ async fn deploy(
         .map_err(CustomError::from)?;
     log::info!("Image '{}' validated ,", &config.image);
 
-    let mut ctr = CtrInstance::new(
-        String::from(&config.service),
-        String::from(&config.image),
-        String::from(&namespace),
+    containerd_manager
+        .create_ctrinstance(
+            String::from(&config.service),
+            String::from(&config.image),
+            namespace.clone(),
+        )
+        .await
+        .map_err(|e| CustomError::OtherError(format!("failed to create container:{}", e)))?;
+
+    CtrInstance::create_and_start_task(
+        containerd_manager
+            .ctr_instance_map
+            .read()
+            .unwrap()
+            .get(&(namespace.clone(), String::from(&config.service)))
+            .unwrap(),
     )
     .await
     .map_err(|e| CustomError::OtherError(format!("failed to create container:{}", e)))?;
 
-    CtrInstance::create_and_start_task(&mut ctr)
-        .await
-        .map_err(|e| {
-            CustomError::OtherError(format!(
-                "failed to start task for container {},{}",
-                &config.service, e
-            ))
-        })?;
-
-    containerd_manager.get_ref().insert_to_manager(
-        (String::from(&namespace), String::from(&config.service)),
-        ctr,
-    );
     log::info!(
         "Container {} created using image {} in namespace {}",
         &config.service,
