@@ -24,42 +24,41 @@ use tokio::{
     time::{Duration, timeout},
 };
 
-use crate::{
-    FunctionScope, GLOBAL_NETNS_MAP, NetworkConfig, image_manager::ImageManager,
-    spec::generate_spec,
-};
+use crate::{FunctionScope,NetworkConfig, image_manager::ImageManager, spec::generate_spec};
+use lazy_static::lazy_static;
+use tokio_util::task::TaskTracker;
 
+lazy_static! {
+    pub static ref TRACKER: TaskTracker = TaskTracker::new();
+}
 pub(super) static CLIENT: OnceCell<Arc<Client>> = OnceCell::const_new();
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct CtrInstance {
     cid: String,
     image: String,
     ns: String,
-    net: Option<NetworkConfig>,
+    net: NetworkConfig,
 }
 impl CtrInstance {
-    //#[allow(clippy::new_ret_no_self)]
     pub async fn new(cid: String, image: String, ns: String) -> Result<Self, ContainerdError> {
-        Self::create_container(image.as_str(), cid.as_str(), ns.as_str()).await?;
+        ContainerdManager::create_container(image.as_str(), cid.as_str(), ns.as_str()).await?;
+        let network_config =
+            ContainerdManager::prepare_cni_network(cid.as_str(), ns.as_str(), image.as_str())?;
         Ok(CtrInstance {
             cid,
             image,
             ns,
-            net: None,
+            net: network_config,
         })
     }
-    pub async fn create_and_start_task(&mut self) -> Result<(), ContainerdError> {
-        let network_config = Self::new_task(&self.cid, &self.ns, &self.image).await?;
-        self.net = Some(network_config);
+    pub async fn create_and_start_task(&self) -> Result<(), ContainerdError> {
+        ContainerdManager::new_task(&self.cid, &self.ns).await?;
         Ok(())
     }
-    pub fn get_net_config(&self) -> Option<&NetworkConfig> {
-        if let Some(net_config) = &self.net {
-            Some(net_config)
-        } else {
-            None
-        }
+    pub fn get_net_config(&self) -> &NetworkConfig {
+        &self.net
     }
 }
 
@@ -67,15 +66,15 @@ impl Drop for CtrInstance {
     fn drop(&mut self) {
         let cid = self.cid.clone();
         let ns = self.ns.clone();
-        delete_cni_network(ns.as_str(), cid.as_str());
-        let _join = tokio::spawn(async move {
-            let _result = Self::delete_container(cid.as_str(), ns.as_str()).await;
+
+        let _join = TRACKER.spawn(async move {
+            let _result = ContainerdManager::delete_container(cid.as_str(), ns.as_str()).await;
         });
     }
 }
 #[derive(Debug, Clone)]
 pub struct ContainerdManager {
-    ctr_instance_map: Arc<RwLock<HashMap<(String, String), CtrInstance>>>,
+    pub ctr_instance_map: Arc<RwLock<HashMap<(String, String), CtrInstance>>>,
 }
 impl Default for ContainerdManager {
     fn default() -> Self {
@@ -89,23 +88,35 @@ impl ContainerdManager {
             ctr_instance_map: Arc::new(RwLock::new(HashMap::new())),
         }
     }
-    pub fn insert_to_manager(&self, ns_cid: (String, String), ctr: CtrInstance) {
-        self.ctr_instance_map.write().unwrap().insert(ns_cid, ctr);
+    pub async fn create_ctrinstance(
+        &self,
+        cid: String,
+        image: String,
+        ns: String,
+    ) -> Result<(), ContainerdError> {
+        self.ctr_instance_map.write().unwrap().insert(
+            (ns.clone(), cid.clone()),
+            CtrInstance::new(cid, image, ns).await?,
+        );
+        Ok(())
     }
-    pub fn remove_from_manager(&self, ns_cid: (String, String)) {
+
+    pub fn delete_ctrinstance(&self, ns_cid: (String, String)) {
         self.ctr_instance_map.write().unwrap().remove(&ns_cid);
     }
+
     pub fn get_network_address(&self, ns_cid: (String, String)) -> String {
         let ctr_map = self.ctr_instance_map.read().unwrap();
         let ctr = ctr_map.get(&ns_cid);
-        ctr.unwrap().get_net_config().unwrap().get_address()
+        ctr.unwrap().get_net_config().get_address()
     }
+
     pub fn get_self(self) -> Arc<RwLock<HashMap<(String, String), CtrInstance>>> {
         self.ctr_instance_map
     }
 }
 
-impl CtrInstance {
+impl ContainerdManager {
     pub async fn init(socket_path: &str) {
         if let Err(e) = CLIENT.set(Arc::new(Client::from_path(socket_path).await.unwrap())) {
             panic!("Failed to set client: {}", e);
@@ -203,7 +214,7 @@ impl CtrInstance {
             .delete(with_namespace!(delete_request, ns))
             .await
             .expect("Failed to delete container");
-
+        delete_cni_network(ns, cid);
         Ok(())
     }
 
@@ -212,7 +223,7 @@ impl CtrInstance {
         let mounts = Self::get_mounts(cid, ns).await?;
         Self::do_create_task(cid, ns, mounts).await?;
         Self::do_start_task(cid, ns).await?;
-        Ok(network_config)
+        Ok(())
     }
 
     async fn do_start_task(cid: &str, ns: &str) -> Result<(), ContainerdError> {

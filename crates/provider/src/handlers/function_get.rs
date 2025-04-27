@@ -33,7 +33,7 @@ pub async fn get_function(
     let address = containerd_manager
         .get_network_address((String::from(namespace), String::from(function_name)));
 
-    let container = CtrInstance::load_container(cid, namespace)
+    let container = ContainerdManager::load_container(cid, namespace)
         .await
         .map_err(|e| FunctionError::FunctionNotFound(e.to_string()))?
         .unwrap_or_default();
@@ -55,7 +55,7 @@ pub async fn get_function(
     let timestamp = container.created_at.unwrap_or_default();
     let created_at = UNIX_EPOCH + Duration::new(timestamp.seconds, timestamp.nanos);
 
-    let task = CtrInstance::get_task(cid, namespace)
+    let task = ContainerdManager::get_task(cid, namespace)
         .await
         .map_err(|e| FunctionError::FunctionNotFound(e.to_string()));
     match task {

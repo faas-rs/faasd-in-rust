@@ -33,7 +33,7 @@ async fn delete(
     namespace: &str,
     containerd_manager: &ContainerdManager,
 ) -> Result<(), CustomError> {
-    let namespaces = CtrInstance::list_namespaces().await.unwrap();
+    let namespaces = ContainerdManager::list_namespaces().await.unwrap();
     if !namespaces.contains(&namespace.to_string()) {
         return HttpResponse::NotFound().body(format!("Namespace '{}' does not exist", namespace));
     }
@@ -67,10 +67,12 @@ async fn delete(function: &Function, namespace: &str) -> Result<(), CustomError>
         .await
         .map_err(|e| {
             log::error!("Failed to delete container: {}", e);
-            CustomError::OtherError(format!("Failed to delete container: {}", e))
-        })?;
-    Ok(())*/
-    containerd_manager.remove_from_manager((String::from(namespace), String::from(function_name)));
+            CustomError::ActixError(error::ErrorInternalServerError(format!(
+                "Failed to delete container: {}",
+                e
+            )))
+        })?;*/
+    containerd_manager.delete_ctrinstance((String::from(namespace), String::from(function_name)));
     Ok(())
 }
 

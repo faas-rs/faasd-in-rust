@@ -6,7 +6,7 @@ use provider::{
     proxy::proxy_handler::proxy_handler,
     types::config::FaaSConfig,
 };
-use service::containerd_manager::{ContainerdManager, CtrInstance};
+use service::containerd_manager::{ContainerdManager, TRACKER};
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
@@ -19,7 +19,7 @@ async fn main() -> std::io::Result<()> {
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
     let socket_path = std::env::var("SOCKET_PATH")
         .unwrap_or_else(|_| "/run/containerd/containerd.sock".to_string());
-    CtrInstance::init(&socket_path).await;
+    ContainerdManager::init(&socket_path).await;
     let ctr_instance_map = ContainerdManager::new();
     let ctr_instance_map_clone = ctr_instance_map.clone();
     let faas_config = FaaSConfig::new();
@@ -53,13 +53,17 @@ async fn main() -> std::io::Result<()> {
         // listen for ctrl-c
         tokio::signal::ctrl_c().await.unwrap();
         ctr_instance_map_clone.get_self().write().unwrap().clear();
-        sleep(Duration::from_secs(3)).await;
-        // start shutdown of tasks
+        //先停止服务器防止close后还有delete 请求
         let server_stop = server_handle.stop(true);
+        server_stop.await;
+        sleep(Duration::from_millis(100)).await;
+        TRACKER.close();
+        TRACKER.wait().await;
+        // start shutdown of tasks
+
         task_shutdown_marker.store(true, Ordering::SeqCst);
 
         // await shutdown of tasks
-        server_stop.await;
     });
 
     let _ = tokio::try_join!(server_task, shutdown).expect("unable to join tasks");
