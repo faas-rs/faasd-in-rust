@@ -78,8 +78,8 @@ async fn deploy(
     CtrInstance::create_and_start_task(
         containerd_manager
             .ctr_instance_map
-            .read()
-            .unwrap()
+            .lock()
+            .await
             .get(&(namespace.clone(), String::from(&config.service)))
             .unwrap(),
     )

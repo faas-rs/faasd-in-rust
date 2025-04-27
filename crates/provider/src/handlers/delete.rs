@@ -4,7 +4,7 @@ use crate::{
 };
 use actix_web::{HttpResponse, Responder, web};
 use serde::{Deserialize, Serialize};
-use service::containerd_manager::{ContainerdManager, CtrInstance};
+use service::containerd_manager::ContainerdManager;
 
 use super::function_list::Function;
 
@@ -72,7 +72,9 @@ async fn delete(function: &Function, namespace: &str) -> Result<(), CustomError>
                 e
             )))
         })?;*/
-    containerd_manager.delete_ctrinstance((String::from(namespace), String::from(function_name)));
+    containerd_manager
+        .delete_ctrinstance((String::from(namespace), String::from(function_name)))
+        .await;
     Ok(())
 }
 
