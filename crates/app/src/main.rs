@@ -46,7 +46,7 @@ async fn main() -> std::io::Result<()> {
     let shutdown = tokio::spawn(async move {
         // listen for ctrl-c
         tokio::signal::ctrl_c().await.unwrap();
-        ctr_instance_map_clone.get_self().write().unwrap().clear();
+        ctr_instance_map_clone.get_self().lock().await.clear();
         //先停止服务器防止close后还有delete 请求
         let server_stop = server_handle.stop(true);
         server_stop.await;

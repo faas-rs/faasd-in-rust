@@ -17,7 +17,7 @@ use sha2::{Digest, Sha256};
 use std::{
     collections::HashMap,
     fs, panic,
-    sync::{Arc, RwLock},
+    sync::Arc,
 };
 use tokio::{
     sync::OnceCell,
@@ -26,8 +26,8 @@ use tokio::{
 
 use crate::{NetworkConfig, image_manager::ImageManager, spec::generate_spec};
 use lazy_static::lazy_static;
+use tokio::sync::Mutex;
 use tokio_util::task::TaskTracker;
-
 lazy_static! {
     pub static ref TRACKER: TaskTracker = TaskTracker::new();
 }
@@ -74,7 +74,7 @@ impl Drop for CtrInstance {
 }
 #[derive(Debug, Clone)]
 pub struct ContainerdManager {
-    pub ctr_instance_map: Arc<RwLock<HashMap<(String, String), CtrInstance>>>,
+    pub ctr_instance_map: Arc<Mutex<HashMap<(String, String), CtrInstance>>>,
 }
 impl Default for ContainerdManager {
     fn default() -> Self {
@@ -85,7 +85,7 @@ impl Default for ContainerdManager {
 impl ContainerdManager {
     pub fn new() -> Self {
         ContainerdManager {
-            ctr_instance_map: Arc::new(RwLock::new(HashMap::new())),
+            ctr_instance_map: Arc::new(Mutex::new(HashMap::new())),
         }
     }
     pub async fn create_ctrinstance(
@@ -94,24 +94,24 @@ impl ContainerdManager {
         image: String,
         ns: String,
     ) -> Result<(), ContainerdError> {
-        self.ctr_instance_map.write().unwrap().insert(
+        self.ctr_instance_map.lock().await.insert(
             (ns.clone(), cid.clone()),
             CtrInstance::new(cid, image, ns).await?,
         );
         Ok(())
     }
 
-    pub fn delete_ctrinstance(&self, ns_cid: (String, String)) {
-        self.ctr_instance_map.write().unwrap().remove(&ns_cid);
+    pub async fn delete_ctrinstance(&self, ns_cid: (String, String)) {
+        self.ctr_instance_map.lock().await.remove(&ns_cid);
     }
 
-    pub fn get_network_address(&self, ns_cid: (String, String)) -> String {
-        let ctr_map = self.ctr_instance_map.read().unwrap();
+    pub async fn get_network_address(&self, ns_cid: (String, String)) -> String {
+        let ctr_map = self.ctr_instance_map.lock().await;
         let ctr = ctr_map.get(&ns_cid);
         ctr.unwrap().get_net_config().get_address()
     }
 
-    pub fn get_self(self) -> Arc<RwLock<HashMap<(String, String), CtrInstance>>> {
+    pub fn get_self(self) -> Arc<Mutex<HashMap<(String, String), CtrInstance>>> {
         self.ctr_instance_map
     }
 }
