@@ -1,6 +1,6 @@
 use crate::consts::DEFAULT_FUNCTION_NAMESPACE;
 use crate::handlers::function_get::get_function;
-use actix_web::{Error, error::ErrorInternalServerError};
+use actix_web::{Error, error::ErrorInternalServerError, error::ErrorServiceUnavailable};
 use log;
 use url::Url;
 
@@ -23,7 +23,7 @@ impl InvokeResolver {
             Ok(function) => function,
             Err(e) => {
                 log::error!("Failed to get function:{}", e);
-                return Err(ErrorInternalServerError("Failed to get function"));
+                return Err(ErrorServiceUnavailable("Failed to get function"));
             }
         };
         log::info!("Function:{:?}", function);
