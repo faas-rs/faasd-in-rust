@@ -33,7 +33,7 @@ pub async fn deploy_handler(info: web::Json<DeployFunctionInfo>) -> impl Respond
 
     match deploy(&function_name, &image, &namespace).await {
         Ok(()) => HttpResponse::Accepted().body(format!(
-            "Function {} deployment initiated successfully .",
+            "Function {} deployment initiated successfully.",
             function_name
         )),
         Err(e) => HttpResponse::BadRequest().body(format!(

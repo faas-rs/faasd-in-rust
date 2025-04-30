@@ -26,8 +26,10 @@ pub async fn delete_handler(info: web::Json<DeleteContainerInfo>) -> impl Respon
         Ok(function) => function,
         Err(e) => {
             log::error!("Failed to get function: {}", e);
-            return HttpResponse::NotFound()
-                .body(format!("Function '{}' not found ", function_name));
+            return HttpResponse::NotFound().body(format!(
+                "Function '{}' not found in namespace '{}'",
+                function_name, namespace
+            ));
         }
     };
 

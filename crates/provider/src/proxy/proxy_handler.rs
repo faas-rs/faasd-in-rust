@@ -43,6 +43,7 @@ async fn proxy_request(
     let proxy_resp = match proxy_req.await {
         Ok(resp) => resp,
         Err(e) => {
+            log::error!("Proxy request failed: {}", e);
             return Err(ErrorInternalServerError(format!(
                 "Proxy request failed: {}",
                 e
