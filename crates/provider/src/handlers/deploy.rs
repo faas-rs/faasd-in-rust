@@ -29,12 +29,12 @@ pub async fn deploy_handler(
 
     match deploy(&config, containerd_manager).await {
         Ok(()) => HttpResponse::Accepted().body(format!(
-            "Function {} deployment initiated successfully.",
-            config.service
+            "Function {} deployment initiated successfully .",
+            &config.service
         )),
-        Err(e) => HttpResponse::InternalServerError().body(format!(
+        Err(e) => HttpResponse::BadRequest().body(format!(
             "failed to deploy function {}, because {}",
-            config.service, e
+            &config.service, e
         )),
     }
 }
