@@ -14,11 +14,7 @@ use containerd_client::{
 };
 use prost_types::Any;
 use sha2::{Digest, Sha256};
-use std::{
-    collections::HashMap,
-    fs, panic,
-    sync::Arc,
-};
+use std::{collections::HashMap, fs, panic, sync::Arc};
 use tokio::{
     sync::OnceCell,
     time::{Duration, timeout},
