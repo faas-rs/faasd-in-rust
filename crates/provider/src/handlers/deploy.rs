@@ -9,7 +9,8 @@ use service::{
     containerd_manager::{ContainerdManager, CtrInstance},
     image_manager::ImageManager,
 };
-
+// 参考响应状态 https://github.com/openfaas/faas/blob/7803ea1861f2a22adcbcfa8c79ed539bc6506d5b/api-docs/spec.openapi.yml#L121C1-L140C45
+// 请求体反序列化失败，自动返回400错误
 pub async fn deploy_handler(
     info: web::Json<DeployFunctionInfo>,
     containerd_manager: web::Data<ContainerdManager>,
@@ -30,11 +31,12 @@ pub async fn deploy_handler(
     match deploy(&config, containerd_manager).await {
         Ok(()) => HttpResponse::Accepted().body(format!(
             "Function {} deployment initiated successfully .",
-            config.service
+            info.function_name.clone()
         )),
-        Err(e) => HttpResponse::InternalServerError().body(format!(
+        Err(e) => HttpResponse::BadRequest().body(format!(
             "failed to deploy function {}, because {}",
-            config.service, e
+            info.function_name.clone(),
+            e
         )),
     }
 }

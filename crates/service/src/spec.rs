@@ -295,7 +295,7 @@ pub fn populate_default_unix_spec(id: &str, ns: &str) -> Spec {
         linux: Linux {
             masked_paths: default_masked_parhs(),
             readonly_paths: default_readonly_paths(),
-            cgroups_path: format!("{}/{}", ns, id),
+            cgroups_path: format!("/{}/{}", ns, id),
             resources: LinuxResources {
                 devices: vec![LinuxDeviceCgroup {
                     allow: false,
