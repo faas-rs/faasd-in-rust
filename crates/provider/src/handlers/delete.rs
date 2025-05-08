@@ -20,31 +20,23 @@ pub async fn delete_handler(
         .clone()
         .unwrap_or_else(|| consts::DEFAULT_FUNCTION_NAMESPACE.to_string());
 
-    match delete(&function_name, &namespace, containerd_manager.get_ref()).await {
-        Ok(()) => {
-            HttpResponse::Ok().body(format!("function {} deleted successfully", function_name))
-        }
-        Err(e) => e.error_response(),
-    }
-}
-
-async fn delete(
-    function_name: &str,
-    namespace: &str,
-    containerd_manager: &ContainerdManager,
-) -> Result<(), CustomError> {
     let namespaces = ContainerdManager::list_namespaces().await.unwrap();
     if !namespaces.contains(&namespace.to_string()) {
         return HttpResponse::NotFound().body(format!("Namespace '{}' does not exist", namespace));
     }
-    let _function = match get_function(&function_name, &namespace, containerd_manager).await {
+
+    let function = match get_function(&function_name, &namespace,&containerd_manager).await {
         Ok(function) => function,
         Err(e) => {
             log::error!("Failed to get function: {}", e);
-            return HttpResponse::NotFound()
-                .body(format!("Function '{}' not found ", function_name));
+            return HttpResponse::NotFound().body(format!(
+                "Function '{}' not found in namespace '{}'",
+                function_name, namespace
+            ));
         }
-    };    /*match delete(&function, &namespace).await {
+    };
+
+    match delete(&function, &namespace,&containerd_manager).await {
         Ok(()) => {
             HttpResponse::Ok().body(format!("Function {} deleted successfully.", function_name))
         }
@@ -54,7 +46,11 @@ async fn delete(
     }
 }
 
-async fn delete(function: &Function, namespace: &str) -> Result<(), CustomError> {
+async fn delete(
+    function: &Function,
+    namespace: &str,
+    containerd_manager: &ContainerdManager,
+) -> Result<(), CustomError> {
     let function_name = function.name.clone();
     if function.replicas != 0 {
         log::info!("function.replicas: {:?}", function.replicas);
@@ -63,18 +59,19 @@ async fn delete(function: &Function, namespace: &str) -> Result<(), CustomError>
     } else {
         log::info!("function.replicas: {:?}", function.replicas);
     }
-    ContainerdManager::delete_container(&function_name, namespace)
-        .await
-        .map_err(|e| {
-            log::error!("Failed to delete container: {}", e);
-            CustomError::ActixError(error::ErrorInternalServerError(format!(
-                "Failed to delete container: {}",
-                e
-            )))
-        })?;*/
-    containerd_manager
-        .delete_ctrinstance((String::from(namespace), String::from(function_name)))
+
+    match ContainerdManager::delete_container(&function_name, namespace)
+    .await {
+        Ok(())=>{
+        containerd_manager
+        .delete_ctrinstance_from_map((String::from(namespace), String::from(function_name)))
         .await;
+        }
+        Err(e)=>{
+            log::error!("Failed to delete container: {}", e);
+            return Err(CustomError::OtherError(format!("Failed to delete container: {}", e)));
+        }
+    }
     Ok(())
 }
 

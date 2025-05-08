@@ -23,8 +23,9 @@ use tokio::{
     sync::OnceCell,
     time::{Duration, timeout},
 };
+use std::mem;
 
-use crate::{FunctionScope,NetworkConfig, image_manager::ImageManager, spec::generate_spec};
+use crate::{NetworkConfig, image_manager::ImageManager, spec::generate_spec};
 use lazy_static::lazy_static;
 use tokio::sync::Mutex;
 use tokio_util::task::TaskTracker;
@@ -68,7 +69,7 @@ impl Drop for CtrInstance {
         let ns = self.ns.clone();
 
         let _join = TRACKER.spawn(async move {
-            let _result = ContainerdManager::delete_container(cid.as_str(), ns.as_str()).await;
+            let _result = ContainerdManager::delete_container(cid.as_str(), ns.as_str()).await;    
         });
     }
 }
@@ -101,8 +102,12 @@ impl ContainerdManager {
         Ok(())
     }
 
-    pub async fn delete_ctrinstance(&self, ns_cid: (String, String)) {
-        self.ctr_instance_map.lock().await.remove(&ns_cid);
+    ///把ctrinstance从map中删除但不调用drop
+    pub async fn delete_ctrinstance_from_map(&self, ns_cid: (String, String)) {
+        
+        if let Some(value) = self.ctr_instance_map.lock().await.remove(&ns_cid) {
+            mem::forget(value);
+        }
     }
 
     pub async fn get_network_address(&self, ns_cid: (String, String)) -> String {
@@ -563,41 +568,12 @@ impl ContainerdManager {
         })?;
         let ports = ImageManager::get_runtime_config(image_name).unwrap().ports;
         let network_config = NetworkConfig::new(ip, ports);
-        let function = FunctionScope {
-            function_name: cid.to_string(),
-            namespace: ns.to_string(),
-        };
-        Self::save_container_network_config(function, network_config);
-        Ok(())
+        
+        
+        Ok(network_config)
     }
 
-    /// 删除cni网络，删除全局map中的网络配置
-    fn remove_cni_network(cid: &str, ns: &str) -> Result<(), ContainerdError> {
-        cni::delete_cni_network(ns, cid);
-        let function = FunctionScope {
-            function_name: cid.to_string(),
-            namespace: ns.to_string(),
-        };
-        Self::remove_container_network_config(&function);
-        Ok(())
-    }
-
-    fn save_container_network_config(function: FunctionScope, net_conf: NetworkConfig) {
-        let mut map = GLOBAL_NETNS_MAP.write().unwrap();
-        map.insert(function, net_conf);
-    }
-
-    pub fn get_address(function: &FunctionScope) -> String {
-        let map = GLOBAL_NETNS_MAP.read().unwrap();
-        let addr = map.get(function).map(|net_conf| net_conf.get_address());
-        addr.unwrap_or_default()
-    }
-
-    fn remove_container_network_config(function: &FunctionScope) {
-        let mut map = GLOBAL_NETNS_MAP.write().unwrap();
-        map.remove(function);
-    }
-
+   
     pub async fn list_namespaces() -> Result<Vec<String>, ContainerdError> {
         let mut c = Self::get_client().await.namespaces();
         let req = ListNamespacesRequest {

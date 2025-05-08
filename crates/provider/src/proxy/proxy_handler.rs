@@ -8,13 +8,14 @@ use actix_web::{
     http::Method,
     web,
 };
-use service::containerd_manager::ContainerdManager;
+use service::containerd_manager::{self, ContainerdManager};
 
 // 主要参考源码的响应设置
 pub async fn proxy_handler(
     config: web::Data<FaaSConfig>,
     req: HttpRequest,
     payload: web::Payload,
+    containerd_manager: web::Data<ContainerdManager>
 ) -> Result<HttpResponse, Error> {
     let proxy_client = new_proxy_client_from_config(config.as_ref()).await;
 
@@ -27,7 +28,7 @@ pub async fn proxy_handler(
         | Method::GET
         | Method::PATCH
         | Method::HEAD
-        | Method::OPTIONS => proxy_request(&req, payload, &proxy_client).await,
+        | Method::OPTIONS => proxy_request(&req, payload, &proxy_client,&containerd_manager.as_ref()).await,
         _ => Err(ErrorMethodNotAllowed("method not allowed")),
     }
 }
@@ -37,13 +38,14 @@ async fn proxy_request(
     req: &HttpRequest,
     payload: web::Payload,
     proxy_client: &reqwest::Client,
+    containerd_manager: &ContainerdManager
 ) -> Result<HttpResponse, Error> {
     let function_name = req.match_info().get("name").unwrap_or("");
     if function_name.is_empty() {
         return Err(ErrorBadRequest("function name is required"));
     }
 
-    let function_addr = InvokeResolver::resolve_function_url(function_name).await?;
+    let function_addr = InvokeResolver::resolve_function_url(function_name,containerd_manager).await?;
 
     let proxy_req = build_proxy_request(req, &function_addr, proxy_client, payload).await?;
 

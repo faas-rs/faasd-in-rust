@@ -31,11 +31,11 @@ pub async fn deploy_handler(
     match deploy(&config, containerd_manager).await {
         Ok(()) => HttpResponse::Accepted().body(format!(
             "Function {} deployment initiated successfully .",
-            function_name
+            &config.service
         )),
         Err(e) => HttpResponse::BadRequest().body(format!(
             "failed to deploy function {}, because {}",
-            function_name, e
+            &config.service, e
         )),
     }
 }
@@ -64,7 +64,7 @@ async fn deploy(
     ImageManager::prepare_image(&config.image, &namespace, true)
         .await
         .map_err(CustomError::from)?;
-    log::info!("Image '{}' validated ,", image);
+    log::info!("Image '{}' validated ,", &config.image);
 
     containerd_manager
         .create_ctrinstance(
@@ -86,19 +86,8 @@ async fn deploy(
     .await
     .map_err(|e| CustomError::OtherError(format!("failed to create container:{}", e)))?;
 
-    CtrInstance::create_and_start_task(&mut ctr)
-        .await
-        .map_err(|e| {
-            CustomError::OtherError(format!(
-                "failed to start task for container {},{}",
-                &config.service, e
-            ))
-        })?;
+   
 
-    containerd_manager.get_ref().insert_to_manager(
-        (String::from(&namespace), String::from(&config.service)),
-        ctr,
-    );
     log::info!(
         "Container {} created using image {} in namespace {}",
         &config.service,
@@ -107,7 +96,7 @@ async fn deploy(
     );
     log::info!(
         "Task for container {} was created successfully",
-        function_name
+        &config.service,
     );
 
     Ok(())
