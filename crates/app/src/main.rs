@@ -6,7 +6,12 @@ use provider::{
     proxy::proxy_handler::proxy_handler,
     types::config::FaaSConfig,
 };
-use service::containerd_manager::ContainerdManager;
+use service::containerd_manager::{ContainerdManager, TRACKER};
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
+use tokio::time::{Duration, sleep};
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -15,7 +20,8 @@ async fn main() -> std::io::Result<()> {
     let socket_path = std::env::var("SOCKET_PATH")
         .unwrap_or_else(|_| "/run/containerd/containerd.sock".to_string());
     ContainerdManager::init(&socket_path).await;
-
+    let ctr_instance_map = ContainerdManager::new();
+    let ctr_instance_map_clone = ctr_instance_map.clone();
     let faas_config = FaaSConfig::new();
 
     log::info!("I'm running!");
@@ -23,6 +29,7 @@ async fn main() -> std::io::Result<()> {
     let server = HttpServer::new(move || {
         App::new()
             .app_data(web::Data::new(faas_config.clone()))
+            .app_data(web::Data::new(ctr_instance_map.clone()))
             .route("/system/functions", web::post().to(deploy_handler))
             .route("/system/functions", web::delete().to(delete_handler))
             .route("/function/{name}{path:/?.*}", web::to(proxy_handler))
@@ -32,11 +39,36 @@ async fn main() -> std::io::Result<()> {
             )
         // 更多路由配置...
     })
-    .bind("0.0.0.0:8090")?;
+    .bind("0.0.0.0:8090")?
+    // disable default signal handling
+    .disable_signals()
+    .run();
 
-    log::info!("Running on 0.0.0.0:8090...");
+    let server_handle = server.handle();
+    let task_shutdown_marker = Arc::new(AtomicBool::new(false));
 
-    server.run().await
+    let server_task = tokio::spawn(server);
+
+    let shutdown = tokio::spawn(async move {
+        // listen for ctrl-c
+        tokio::signal::ctrl_c().await.unwrap();
+        ctr_instance_map_clone.get_self().lock().await.clear();
+        //先停止服务器防止close后还有delete 请求
+        let server_stop = server_handle.stop(true);
+        server_stop.await;
+        sleep(Duration::from_millis(100)).await;
+        TRACKER.close();
+        TRACKER.wait().await;
+        // start shutdown of tasks
+
+        task_shutdown_marker.store(true, Ordering::SeqCst);
+
+        // await shutdown of tasks
+    });
+
+    let _ = tokio::try_join!(server_task, shutdown).expect("unable to join tasks");
+
+    Ok(())
 }
 
 // 测试env能够正常获取

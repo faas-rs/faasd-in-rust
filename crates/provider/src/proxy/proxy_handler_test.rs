@@ -6,6 +6,7 @@ mod test {
         test::{self},
         web::{self, Bytes},
     };
+    use service::containerd_manager::ContainerdManager;
 
     #[actix_web::test]
     #[ignore]
@@ -15,6 +16,7 @@ mod test {
 
     #[actix_web::test]
     async fn test_path_parsing() {
+        let containerd_manager = ContainerdManager::new();
         let test_cases = vec![
             ("simple_name_match", "/function/echo", "echo", "", 200),
             (
@@ -50,6 +52,7 @@ mod test {
 
         let app = test::init_service(
             App::new()
+                .app_data(web::Data::new(containerd_manager.clone()))
                 .route("/function/{name}", web::get().to(var_handler))
                 .route("/function/{name}/", web::get().to(var_handler))
                 .route("/function/{name}/{params:.*}", web::get().to(var_handler)),
@@ -72,8 +75,11 @@ mod test {
 
     #[actix_web::test]
     async fn test_handler_func_invalid_method() {
+        let containerd_manager = ContainerdManager::new();
         let app = test::init_service(
-            App::new().route("/function/{name}{path:/?.*}", web::to(proxy_handler)),
+            App::new()
+                .app_data(web::Data::new(containerd_manager.clone()))
+                .route("/function/{name}{path:/?.*}", web::to(proxy_handler)),
         )
         .await;
 
@@ -86,8 +92,11 @@ mod test {
 
     #[actix_web::test]
     async fn test_handler_func_empty_function_nam() {
+        let containerd_manager = ContainerdManager::new();
         let app = test::init_service(
-            App::new().route("/function{name:/?}{path:/?.*}", web::to(proxy_handler)),
+            App::new()
+                .app_data(web::Data::new(containerd_manager.clone()))
+                .route("/function{name:/?}{path:/?.*}", web::to(proxy_handler)),
         )
         .await;
 
@@ -102,8 +111,11 @@ mod test {
 
     #[actix_web::test]
     async fn test_handler_func_empty_function_name() {
+        let containerd_manager = ContainerdManager::new();
         let app = test::init_service(
-            App::new().route("/function{name:/?}{path:/?.*}", web::to(proxy_handler)),
+            App::new()
+                .app_data(web::Data::new(containerd_manager.clone()))
+                .route("/function{name:/?}{path:/?.*}", web::to(proxy_handler)),
         )
         .await;
 

@@ -7,12 +7,14 @@ use actix_web::{
     http::Method,
     web,
 };
+use service::containerd_manager::ContainerdManager;
 
 // 主要参考源码的响应设置
 pub async fn proxy_handler(
     req: HttpRequest,
     payload: web::Payload,
-) -> actix_web::Result<HttpResponse> {
+    containerd_manager: web::Data<ContainerdManager>,
+) -> Result<HttpResponse, actix_web::Error> {
     match *req.method() {
         Method::POST
         | Method::PUT
@@ -20,7 +22,7 @@ pub async fn proxy_handler(
         | Method::GET
         | Method::PATCH
         | Method::HEAD
-        | Method::OPTIONS => proxy_request(&req, payload).await,
+        | Method::OPTIONS => proxy_request(&req, payload, &containerd_manager).await,
         _ => Err(ErrorMethodNotAllowed("Method not allowed")),
     }
 }
@@ -29,13 +31,15 @@ pub async fn proxy_handler(
 async fn proxy_request(
     req: &HttpRequest,
     payload: web::Payload,
+    containerd_manager: &ContainerdManager,
 ) -> actix_web::Result<HttpResponse> {
     let function_name = req.match_info().get("name").unwrap_or("");
     if function_name.is_empty() {
         return Err(ErrorBadRequest("Function name is required"));
     }
 
-    let function_addr = InvokeResolver::resolve_function_url(function_name).await?;
+    let function_addr =
+        InvokeResolver::resolve_function_url(function_name, containerd_manager).await?;
 
     let proxy_req = create_proxy_request(req, &function_addr, payload);
 

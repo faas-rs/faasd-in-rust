@@ -1,5 +1,4 @@
-use std::{fs, panic, sync::Arc};
-
+use cni::delete_cni_network;
 use containerd_client::{
     Client,
     services::v1::{
@@ -15,20 +14,107 @@ use containerd_client::{
 };
 use prost_types::Any;
 use sha2::{Digest, Sha256};
+use std::mem;
+use std::{collections::HashMap, fs, panic, sync::Arc};
 use tokio::{
     sync::OnceCell,
     time::{Duration, timeout},
 };
 
-use crate::{
-    FunctionScope, GLOBAL_NETNS_MAP, NetworkConfig, image_manager::ImageManager,
-    spec::generate_spec,
-};
-
+use crate::{NetworkConfig, image_manager::ImageManager, spec::generate_spec};
+use lazy_static::lazy_static;
+use tokio::sync::Mutex;
+use tokio_util::task::TaskTracker;
+lazy_static! {
+    pub static ref TRACKER: TaskTracker = TaskTracker::new();
+}
 pub(super) static CLIENT: OnceCell<Arc<Client>> = OnceCell::const_new();
 
 #[derive(Debug)]
-pub struct ContainerdManager;
+#[allow(dead_code)]
+pub struct CtrInstance {
+    cid: String,
+    image: String,
+    ns: String,
+    net: NetworkConfig,
+}
+impl CtrInstance {
+    pub async fn new(cid: String, image: String, ns: String) -> Result<Self, ContainerdError> {
+        ContainerdManager::create_container(image.as_str(), cid.as_str(), ns.as_str()).await?;
+        let network_config =
+            ContainerdManager::prepare_cni_network(cid.as_str(), ns.as_str(), image.as_str())?;
+        Ok(CtrInstance {
+            cid,
+            image,
+            ns,
+            net: network_config,
+        })
+    }
+    pub async fn create_and_start_task(&self) -> Result<(), ContainerdError> {
+        ContainerdManager::new_task(&self.cid, &self.ns).await?;
+        Ok(())
+    }
+    pub fn get_net_config(&self) -> &NetworkConfig {
+        &self.net
+    }
+}
+
+impl Drop for CtrInstance {
+    fn drop(&mut self) {
+        let cid = self.cid.clone();
+        let ns = self.ns.clone();
+
+        let _join = TRACKER.spawn(async move {
+            let _result = ContainerdManager::delete_container(cid.as_str(), ns.as_str()).await;
+        });
+    }
+}
+#[derive(Debug, Clone)]
+pub struct ContainerdManager {
+    pub ctr_instance_map: Arc<Mutex<HashMap<(String, String), CtrInstance>>>,
+}
+impl Default for ContainerdManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ContainerdManager {
+    pub fn new() -> Self {
+        ContainerdManager {
+            ctr_instance_map: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+    pub async fn create_ctrinstance(
+        &self,
+        cid: String,
+        image: String,
+        ns: String,
+    ) -> Result<(), ContainerdError> {
+        self.ctr_instance_map.lock().await.insert(
+            (ns.clone(), cid.clone()),
+            CtrInstance::new(cid, image, ns).await?,
+        );
+        Ok(())
+    }
+
+    ///把ctrinstance从map中删除但不调用drop
+    pub async fn delete_ctrinstance_from_map(&self, ns_cid: (String, String)) {
+        if let Some(value) = self.ctr_instance_map.lock().await.remove(&ns_cid) {
+            mem::forget(value);
+        }
+    }
+
+    pub async fn get_network_address(&self, ns_cid: (String, String)) -> String {
+        let ctr_map = self.ctr_instance_map.lock().await;
+        let ctr = ctr_map.get(&ns_cid);
+        ctr.unwrap().get_net_config().get_address()
+    }
+
+    pub fn get_self(self) -> Arc<Mutex<HashMap<(String, String), CtrInstance>>> {
+        self.ctr_instance_map
+    }
+}
 
 impl ContainerdManager {
     pub async fn init(socket_path: &str) {
@@ -75,7 +161,6 @@ impl ContainerdManager {
         };
 
         Self::do_create_container(container, ns).await?;
-        Self::prepare_cni_network(cid, ns, image_name)?;
 
         Ok(())
     }
@@ -115,10 +200,6 @@ impl ContainerdManager {
 
         Self::do_delete_container(cid, ns).await?;
 
-        Self::remove_cni_network(cid, ns).map_err(|e| {
-            log::error!("Failed to remove CNI network: {}", e);
-            ContainerdError::CreateTaskError(e.to_string())
-        })?;
         Ok(())
     }
 
@@ -132,7 +213,7 @@ impl ContainerdManager {
             .delete(with_namespace!(delete_request, ns))
             .await
             .expect("Failed to delete container");
-
+        delete_cni_network(ns, cid);
         Ok(())
     }
 
@@ -470,46 +551,19 @@ impl ContainerdManager {
     }
 
     /// 为一个容器准备cni网络并写入全局map中
-    fn prepare_cni_network(cid: &str, ns: &str, image_name: &str) -> Result<(), ContainerdError> {
+    fn prepare_cni_network(
+        cid: &str,
+        ns: &str,
+        image_name: &str,
+    ) -> Result<NetworkConfig, ContainerdError> {
         let ip = cni::create_cni_network(cid.to_string(), ns.to_string()).map_err(|e| {
             log::error!("Failed to create CNI network: {}", e);
             ContainerdError::CreateTaskError(e.to_string())
         })?;
         let ports = ImageManager::get_runtime_config(image_name).unwrap().ports;
         let network_config = NetworkConfig::new(ip, ports);
-        let function = FunctionScope {
-            function_name: cid.to_string(),
-            namespace: ns.to_string(),
-        };
-        Self::save_container_network_config(function, network_config);
-        Ok(())
-    }
 
-    /// 删除cni网络，删除全局map中的网络配置
-    fn remove_cni_network(cid: &str, ns: &str) -> Result<(), ContainerdError> {
-        cni::delete_cni_network(ns, cid);
-        let function = FunctionScope {
-            function_name: cid.to_string(),
-            namespace: ns.to_string(),
-        };
-        Self::remove_container_network_config(&function);
-        Ok(())
-    }
-
-    fn save_container_network_config(function: FunctionScope, net_conf: NetworkConfig) {
-        let mut map = GLOBAL_NETNS_MAP.write().unwrap();
-        map.insert(function, net_conf);
-    }
-
-    pub fn get_address(function: &FunctionScope) -> String {
-        let map = GLOBAL_NETNS_MAP.read().unwrap();
-        let addr = map.get(function).map(|net_conf| net_conf.get_address());
-        addr.unwrap_or_default()
-    }
-
-    fn remove_container_network_config(function: &FunctionScope) {
-        let mut map = GLOBAL_NETNS_MAP.write().unwrap();
-        map.remove(function);
+        Ok(network_config)
     }
 
     pub async fn list_namespaces() -> Result<Vec<String>, ContainerdError> {
