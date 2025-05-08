@@ -25,7 +25,7 @@ pub async fn delete_handler(
         return HttpResponse::NotFound().body(format!("Namespace '{}' does not exist", namespace));
     }
 
-    let function = match get_function(&function_name, &namespace,&containerd_manager).await {
+    let function = match get_function(&function_name, &namespace, &containerd_manager).await {
         Ok(function) => function,
         Err(e) => {
             log::error!("Failed to get function: {}", e);
@@ -36,7 +36,7 @@ pub async fn delete_handler(
         }
     };
 
-    match delete(&function, &namespace,&containerd_manager).await {
+    match delete(&function, &namespace, &containerd_manager).await {
         Ok(()) => {
             HttpResponse::Ok().body(format!("Function {} deleted successfully.", function_name))
         }
@@ -60,16 +60,18 @@ async fn delete(
         log::info!("function.replicas: {:?}", function.replicas);
     }
 
-    match ContainerdManager::delete_container(&function_name, namespace)
-    .await {
-        Ok(())=>{
-        containerd_manager
-        .delete_ctrinstance_from_map((String::from(namespace), String::from(function_name)))
-        .await;
+    match ContainerdManager::delete_container(&function_name, namespace).await {
+        Ok(()) => {
+            containerd_manager
+                .delete_ctrinstance_from_map((String::from(namespace), function_name))
+                .await;
         }
-        Err(e)=>{
+        Err(e) => {
             log::error!("Failed to delete container: {}", e);
-            return Err(CustomError::OtherError(format!("Failed to delete container: {}", e)));
+            return Err(CustomError::OtherError(format!(
+                "Failed to delete container: {}",
+                e
+            )));
         }
     }
     Ok(())

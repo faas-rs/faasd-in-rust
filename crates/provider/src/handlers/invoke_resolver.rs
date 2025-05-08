@@ -23,13 +23,14 @@ impl InvokeResolver {
             actual_function_name = function_name.trim_end_matches(&format!(".{}", namespace));
         }
 
-        let function = match get_function(function_name, &namespace, containerd_manager).await {
-            Ok(function) => function,
-            Err(e) => {
-                log::error!("Failed to get function:{}", e);
-                return Err(ErrorServiceUnavailable("Failed to get function"));
-            }
-        };
+        let function =
+            match get_function(actual_function_name, &namespace, containerd_manager).await {
+                Ok(function) => function,
+                Err(e) => {
+                    log::error!("Failed to get function:{}", e);
+                    return Err(ErrorServiceUnavailable("Failed to get function"));
+                }
+            };
         log::info!("Function:{:?}", function);
 
         let address = function.address.clone();
