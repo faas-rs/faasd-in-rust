@@ -86,8 +86,6 @@ async fn deploy(
     .await
     .map_err(|e| CustomError::OtherError(format!("failed to create container:{}", e)))?;
 
-   
-
     log::info!(
         "Container {} created using image {} in namespace {}",
         &config.service,

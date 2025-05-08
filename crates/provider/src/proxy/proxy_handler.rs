@@ -1,26 +1,20 @@
 use crate::handlers::invoke_resolver::InvokeResolver;
-use crate::proxy::builder::build_proxy_request;
-use crate::proxy::client::new_proxy_client_from_config;
-use crate::types::config::FaaSConfig;
+use crate::proxy::builder::create_proxy_request;
+
 use actix_web::{
-    Error, HttpRequest, HttpResponse,
+    HttpRequest, HttpResponse,
     error::{ErrorBadRequest, ErrorInternalServerError, ErrorMethodNotAllowed},
     http::Method,
     web,
 };
-use service::containerd_manager::{self, ContainerdManager};
+use service::containerd_manager::ContainerdManager;
 
 // 主要参考源码的响应设置
 pub async fn proxy_handler(
-    config: web::Data<FaaSConfig>,
     req: HttpRequest,
     payload: web::Payload,
-    containerd_manager: web::Data<ContainerdManager>
-) -> Result<HttpResponse, Error> {
-    let proxy_client = new_proxy_client_from_config(config.as_ref()).await;
-
-    log::info!("proxy_client : {:?}", proxy_client);
-
+    containerd_manager: web::Data<ContainerdManager>,
+) -> Result<HttpResponse, actix_web::Error> {
     match *req.method() {
         Method::POST
         | Method::PUT
@@ -28,8 +22,8 @@ pub async fn proxy_handler(
         | Method::GET
         | Method::PATCH
         | Method::HEAD
-        | Method::OPTIONS => proxy_request(&req, payload, &proxy_client,&containerd_manager.as_ref()).await,
-        _ => Err(ErrorMethodNotAllowed("method not allowed")),
+        | Method::OPTIONS => proxy_request(&req, payload, &containerd_manager).await,
+        _ => Err(ErrorMethodNotAllowed("Method not allowed")),
     }
 }
 
@@ -37,31 +31,33 @@ pub async fn proxy_handler(
 async fn proxy_request(
     req: &HttpRequest,
     payload: web::Payload,
-    proxy_client: &reqwest::Client,
-    containerd_manager: &ContainerdManager
-) -> Result<HttpResponse, Error> {
+    containerd_manager: &ContainerdManager,
+) -> actix_web::Result<HttpResponse> {
     let function_name = req.match_info().get("name").unwrap_or("");
     if function_name.is_empty() {
-        return Err(ErrorBadRequest("function name is required"));
+        return Err(ErrorBadRequest("Function name is required"));
     }
 
-    let function_addr = InvokeResolver::resolve_function_url(function_name,containerd_manager).await?;
+    let function_addr =
+        InvokeResolver::resolve_function_url(function_name, containerd_manager).await?;
 
-    let proxy_req = build_proxy_request(req, &function_addr, proxy_client, payload).await?;
+    let proxy_req = create_proxy_request(req, &function_addr, payload);
 
-    match proxy_req.send().await {
-        Ok(resp) => {
-            let status = resp.status();
-            let mut client_resp = HttpResponse::build(status);
-
-            for (name, value) in resp.headers().iter() {
-                client_resp.insert_header((name.clone(), value.clone()));
-            }
-
-            let body = resp.bytes().await.unwrap();
-
-            Ok(client_resp.body(body))
+    // Handle the error conversion explicitly
+    let proxy_resp = match proxy_req.await {
+        Ok(resp) => resp,
+        Err(e) => {
+            log::error!("Proxy request failed: {}", e);
+            return Err(ErrorInternalServerError(format!(
+                "Proxy request failed: {}",
+                e
+            )));
         }
-        Err(e) => Err(ErrorInternalServerError(e)),
-    }
+    };
+
+    // Now create an HttpResponse from the proxy response
+    let mut client_resp = HttpResponse::build(proxy_resp.status());
+
+    // Stream the response body
+    Ok(client_resp.streaming(proxy_resp))
 }

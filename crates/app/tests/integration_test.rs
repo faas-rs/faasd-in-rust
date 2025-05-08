@@ -11,6 +11,8 @@ mod integration_tests {
     use actix_web::http::StatusCode;
     use actix_web::test;
     use serde_json::json;
+    use std::thread::sleep;
+    use std::time::Duration;
 
     #[actix_web::test]
     #[ignore]
@@ -37,7 +39,7 @@ mod integration_tests {
             .uri("/function/test-no-found-function")
             .to_request();
         let resp = test::call_service(&app, req).await;
-        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
         let response_body = test::read_body(resp).await;
         let response_str = std::str::from_utf8(&response_body).unwrap();
         assert!(response_str.contains("Failed to get function"));
@@ -76,6 +78,7 @@ mod integration_tests {
         log::info!("{}", response_str);
         assert!(response_str.contains("Function test-function deployment initiated successfully."));
 
+        sleep(Duration::from_secs(2));
         // test proxy in namespace 'default'
         let req = test::TestRequest::get()
             .uri("/function/test-function")

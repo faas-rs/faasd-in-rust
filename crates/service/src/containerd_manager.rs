@@ -14,16 +14,12 @@ use containerd_client::{
 };
 use prost_types::Any;
 use sha2::{Digest, Sha256};
-use std::{
-    collections::HashMap,
-    fs, panic,
-    sync::Arc,
-};
+use std::mem;
+use std::{collections::HashMap, fs, panic, sync::Arc};
 use tokio::{
     sync::OnceCell,
     time::{Duration, timeout},
 };
-use std::mem;
 
 use crate::{NetworkConfig, image_manager::ImageManager, spec::generate_spec};
 use lazy_static::lazy_static;
@@ -69,7 +65,7 @@ impl Drop for CtrInstance {
         let ns = self.ns.clone();
 
         let _join = TRACKER.spawn(async move {
-            let _result = ContainerdManager::delete_container(cid.as_str(), ns.as_str()).await;    
+            let _result = ContainerdManager::delete_container(cid.as_str(), ns.as_str()).await;
         });
     }
 }
@@ -104,7 +100,6 @@ impl ContainerdManager {
 
     ///把ctrinstance从map中删除但不调用drop
     pub async fn delete_ctrinstance_from_map(&self, ns_cid: (String, String)) {
-        
         if let Some(value) = self.ctr_instance_map.lock().await.remove(&ns_cid) {
             mem::forget(value);
         }
@@ -166,7 +161,6 @@ impl ContainerdManager {
         };
 
         Self::do_create_container(container, ns).await?;
-        
 
         Ok(())
     }
@@ -568,12 +562,10 @@ impl ContainerdManager {
         })?;
         let ports = ImageManager::get_runtime_config(image_name).unwrap().ports;
         let network_config = NetworkConfig::new(ip, ports);
-        
-        
+
         Ok(network_config)
     }
 
-   
     pub async fn list_namespaces() -> Result<Vec<String>, ContainerdError> {
         let mut c = Self::get_client().await.namespaces();
         let req = ListNamespacesRequest {
