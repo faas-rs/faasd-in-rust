@@ -33,13 +33,12 @@ pub async fn function_list_handler(
     if namespace.is_empty() {
         return HttpResponse::BadRequest().body("provide namespace in path");
     }
-    let namespaces = match ContainerdManager::list_namespaces().await {
-        Ok(namespace) => namespace,
-        Err(e) => {
-            return HttpResponse::InternalServerError()
-                .body(format!("Failed to list namespaces:{}", e));
-        }
-    };
+    let namespaces = ContainerdManager::list_namespaces()
+        .await
+        .map_err(|e| {
+            HttpResponse::InternalServerError().body(format!("Failed to list namespaces:{}", e))
+        })
+        .unwrap();
     if !namespaces.contains(&namespace.to_string()) {
         return HttpResponse::BadRequest()
             .body(format!("Namespace '{}' does not exist", namespace));
@@ -68,10 +67,9 @@ async fn get_function_list(
     let mut functions: Vec<Function> = Vec::new();
     for cid in container_list {
         log::info!("cid: {}", cid);
-        let function = match get_function(&cid, namespace, containerd_manager).await {
-            Ok(function) => function,
-            Err(e) => return Err(CustomError::FunctionError(e)),
-        };
+        let function = get_function(&cid, namespace, containerd_manager)
+            .await
+            .map_err(CustomError::FunctionError)?;
         functions.push(function);
     }
     Ok(functions)

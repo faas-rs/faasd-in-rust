@@ -7,10 +7,6 @@ use provider::{
     types::config::FaaSConfig,
 };
 use service::containerd_manager::{ContainerdManager, TRACKER};
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, Ordering},
-};
 use tokio::time::{Duration, sleep};
 
 #[actix_web::main]
@@ -45,7 +41,6 @@ async fn main() -> std::io::Result<()> {
     .run();
 
     let server_handle = server.handle();
-    let task_shutdown_marker = Arc::new(AtomicBool::new(false));
 
     let server_task = tokio::spawn(server);
 
@@ -54,14 +49,11 @@ async fn main() -> std::io::Result<()> {
         tokio::signal::ctrl_c().await.unwrap();
         ctr_instance_map_clone.get_self().lock().await.clear();
         //先停止服务器防止close后还有delete 请求
-        let server_stop = server_handle.stop(true);
-        server_stop.await;
+        server_handle.stop(true).await;
         sleep(Duration::from_millis(100)).await;
         TRACKER.close();
         TRACKER.wait().await;
         // start shutdown of tasks
-
-        task_shutdown_marker.store(true, Ordering::SeqCst);
 
         // await shutdown of tasks
     });

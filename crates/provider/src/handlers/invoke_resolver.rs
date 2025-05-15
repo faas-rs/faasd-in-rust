@@ -23,25 +23,20 @@ impl InvokeResolver {
             actual_function_name = function_name.trim_end_matches(&format!(".{}", namespace));
         }
 
-        let function =
-            match get_function(actual_function_name, &namespace, containerd_manager).await {
-                Ok(function) => function,
-                Err(e) => {
-                    log::error!("Failed to get function:{}", e);
-                    return Err(ErrorServiceUnavailable("Failed to get function"));
-                }
-            };
+        let function = get_function(actual_function_name, &namespace, containerd_manager)
+            .await
+            .map_err(|e| {
+                log::error!("Failed to get function:{}", e);
+                ErrorServiceUnavailable("Failed to get function")
+            })?;
         log::info!("Function:{:?}", function);
 
         let address = function.address.clone();
         let urlstr = format!("http://{}", address);
-        match Url::parse(&urlstr) {
-            Ok(url) => Ok(url),
-            Err(e) => {
-                log::error!("Failed to resolve url:{}", e);
-                Err(ErrorInternalServerError("Failed to resolve URL"))
-            }
-        }
+        Url::parse(&urlstr).map_err(|e| {
+            log::error!("Failed to resolve url:{}", e);
+            ErrorInternalServerError("Failed to resolve URL")
+        })
     }
 }
 

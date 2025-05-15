@@ -14,7 +14,7 @@ pub async fn proxy_handler(
     req: HttpRequest,
     payload: web::Payload,
     containerd_manager: web::Data<ContainerdManager>,
-) -> Result<HttpResponse, actix_web::Error> {
+) -> actix_web::Result<HttpResponse> {
     match *req.method() {
         Method::POST
         | Method::PUT
