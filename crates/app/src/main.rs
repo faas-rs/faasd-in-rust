@@ -1,5 +1,6 @@
 use actix_web::{App, HttpServer, web};
 use provider::{
+    auth::middleware::BasicAuth,
     handlers::{
         delete::delete_handler, deploy::deploy_handler, function_list::function_list_handler,
     },
@@ -7,7 +8,6 @@ use provider::{
     types::config::FaaSConfig,
 };
 use service::containerd_manager::ContainerdManager;
-
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     dotenv::dotenv().ok();
@@ -17,12 +17,14 @@ async fn main() -> std::io::Result<()> {
     ContainerdManager::init(&socket_path).await;
 
     let faas_config = FaaSConfig::new();
-
+    log::info!("BasicAuth username: {}", faas_config.basic_auth_username);
+    log::info!("BasicAuth password: {}", faas_config.basic_auth_password);
     log::info!("I'm running!");
 
     let server = HttpServer::new(move || {
         App::new()
             .app_data(web::Data::new(faas_config.clone()))
+            .wrap(BasicAuth)
             .route("/system/functions", web::post().to(deploy_handler))
             .route("/system/functions", web::delete().to(delete_handler))
             .route("/function/{name}{path:/?.*}", web::to(proxy_handler))
