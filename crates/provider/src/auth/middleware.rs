@@ -1,7 +1,7 @@
 use crate::types::config::FaaSConfig;
 use actix_web::body::BoxBody;
 use actix_web::{
-    Error, HttpMessage, HttpResponse,
+    Error, HttpResponse,
     dev::{Service, ServiceRequest, ServiceResponse, Transform, forward_ready},
     error::ErrorInternalServerError,
     web,
@@ -67,8 +67,7 @@ where
 
         if let Some(auth_val) = auth_header {
             if let Ok(auth_str) = auth_val.to_str() {
-                if auth_str.starts_with("Basic ") {
-                    let base64_credentials = &auth_str[6..];
+                if let Some(base64_credentials) = auth_str.strip_prefix("Basic ") {
                     if let Ok(decoded_bytes) = BASE64_STANDARD.decode(base64_credentials) {
                         if let Ok(credentials_str) = String::from_utf8(decoded_bytes) {
                             let mut parts = credentials_str.splitn(2, ':');
