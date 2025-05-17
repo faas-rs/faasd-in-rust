@@ -1,59 +1,20 @@
-use crate::handlers::invoke_resolver::InvokeResolver;
+// use crate::handlers::invoke_resolver::InvokeResolver;
 use crate::proxy::builder::create_proxy_request;
 
-use actix_web::{
-    HttpRequest, HttpResponse,
-    error::{ErrorBadRequest, ErrorInternalServerError, ErrorMethodNotAllowed},
-    http::Method,
-    web,
-};
-use service::containerd_manager::ContainerdManager;
+use actix_web::{HttpRequest, HttpResponse, error::ErrorInternalServerError, web};
 
-// 主要参考源码的响应设置
-pub async fn proxy_handler(
-    req: HttpRequest,
-    payload: web::Payload,
-    containerd_manager: web::Data<ContainerdManager>,
-) -> actix_web::Result<HttpResponse> {
-    match *req.method() {
-        Method::POST
-        | Method::PUT
-        | Method::DELETE
-        | Method::GET
-        | Method::PATCH
-        | Method::HEAD
-        | Method::OPTIONS => proxy_request(&req, payload, &containerd_manager).await,
-        _ => Err(ErrorMethodNotAllowed("Method not allowed")),
-    }
-}
-
-//根据原始请求，解析url，构建转发请求并转发，获取响应
-async fn proxy_request(
+pub async fn proxy_request(
     req: &HttpRequest,
     payload: web::Payload,
-    containerd_manager: &ContainerdManager,
+    upstream: url::Url,
 ) -> actix_web::Result<HttpResponse> {
-    let function_name = req.match_info().get("name").unwrap_or("");
-    if function_name.is_empty() {
-        return Err(ErrorBadRequest("Function name is required"));
-    }
-
-    let function_addr =
-        InvokeResolver::resolve_function_url(function_name, containerd_manager).await?;
-
-    let proxy_req = create_proxy_request(req, &function_addr, payload);
-
     // Handle the error conversion explicitly
-    let proxy_resp = match proxy_req.await {
-        Ok(resp) => resp,
-        Err(e) => {
-            log::error!("Proxy request failed: {}", e);
-            return Err(ErrorInternalServerError(format!(
-                "Proxy request failed: {}",
-                e
-            )));
-        }
-    };
+    let proxy_resp = create_proxy_request(req, &upstream, payload)
+        .await
+        .map_err(|e| {
+            log::error!("Failed to create proxy request: {}", e);
+            ErrorInternalServerError("Failed to create proxy request")
+        })?;
 
     // Now create an HttpResponse from the proxy response
     let mut client_resp = HttpResponse::build(proxy_resp.status());

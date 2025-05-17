@@ -31,7 +31,6 @@ serde = { version = "1", features = ["derive"] }
 smallvec = { version = "1", default-features = false, features = ["const_new"] }
 tokio = { version = "1", features = ["full"] }
 tokio-util = { version = "0.7", features = ["full"] }
-tower = { version = "0.4", features = ["balance", "buffer", "limit", "util"] }
 tracing = { version = "0.1", features = ["log"] }
 tracing-core = { version = "0.1", default-features = false, features = ["std"] }
 

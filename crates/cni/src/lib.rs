@@ -34,8 +34,8 @@ pub fn init_net_work() -> Result<(), Err> {
 }
 
 //TODO: 创建网络和删除网络的错误处理
-pub fn create_cni_network(cid: String, ns: String) -> Result<String, Err> {
-    let netns = util::netns_from_cid_and_cns(&cid, &ns);
+pub fn create_cni_network(cid: &str, ns: &str) -> Result<String, Err> {
+    let netns = util::netns_from_cid_and_cns(cid, ns);
     let mut ip = String::new();
 
     netns::create(&netns)?;

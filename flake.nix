@@ -59,7 +59,6 @@
           fileset = lib.fileset.unions [
             ./Cargo.toml
             ./Cargo.lock
-            (craneLib.fileset.commonCargoSources ./crates/app)
             (craneLib.fileset.commonCargoSources ./crates/service)
             (craneLib.fileset.commonCargoSources ./crates/provider)
             (craneLib.fileset.commonCargoSources ./crates/cni)
@@ -70,8 +69,8 @@
 
         faas-rs-crate = craneLib.buildPackage ( individualCrateArgs // {
           pname = "faas-rs";
-          cargoExtraArgs = "-p faas-rs";
-          src = fileSetForCrate ./crates/app;
+          cargoExtraArgs = "-p service";
+          src = fileSetForCrate ./crates/service;
         });
       in
       with pkgs;
