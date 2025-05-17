@@ -1,7 +1,8 @@
+use oci_spec::image::ImageConfiguration;
 use serde::{Deserialize, Serialize};
 use std::fs::File;
 
-use crate::image_manager::ImageRuntimeConfig;
+use super::{ContainerdService, error::ContainerdError, function::ContainerStaticMetadata};
 
 // 定义版本的常量
 const VERSION_MAJOR: u32 = 1;
@@ -321,7 +322,7 @@ fn get_netns(ns: &str, cid: &str) -> String {
 pub fn generate_spec(
     id: &str,
     ns: &str,
-    runtime_config: &ImageRuntimeConfig,
+    runtime_config: &RuntimeConfig,
 ) -> Result<String, std::io::Error> {
     let namespace = match ns {
         "" => DEFAULT_NAMESPACE,
@@ -336,4 +337,72 @@ pub fn generate_spec(
     std::fs::create_dir_all(&dir_path)?;
     save_spec_to_file(&spec, &path)?;
     Ok(path)
+}
+
+#[derive(Debug, Clone)]
+pub struct RuntimeConfig {
+    pub env: Vec<String>,
+    pub args: Vec<String>,
+    pub ports: Vec<String>,
+    pub cwd: String,
+}
+
+impl TryFrom<ImageConfiguration> for RuntimeConfig {
+    type Error = ContainerdError;
+
+    fn try_from(value: ImageConfiguration) -> Result<Self, Self::Error> {
+        let conf_ref = value.config().as_ref();
+        let config = conf_ref.ok_or(ContainerdError::GenerateSpecError(
+            "Image configuration not found".to_string(),
+        ))?;
+
+        let env = config.env().clone().ok_or_else(|| {
+            ContainerdError::GenerateSpecError("Environment variables not found".to_string())
+        })?;
+        let args = config.cmd().clone().ok_or_else(|| {
+            ContainerdError::GenerateSpecError("Command arguments not found".to_string())
+        })?;
+        let ports = config.exposed_ports().clone().unwrap_or_else(|| {
+            log::warn!("Exposed ports not found, using default port 8080/tcp");
+            vec!["8080/tcp".to_string()]
+        });
+        let cwd = config.working_dir().clone().unwrap_or_else(|| {
+            log::warn!("Working directory not found, using default /");
+            "/".to_string()
+        });
+        Ok(RuntimeConfig {
+            env,
+            args,
+            ports,
+            cwd,
+        })
+    }
+}
+
+impl ContainerdService {
+    pub async fn get_spec(
+        &self,
+        metadata: &ContainerStaticMetadata,
+    ) -> Result<Option<prost_types::Any>, ContainerdError> {
+        let image_conf = self
+            .image_config(&metadata.image, &metadata.namespace)
+            .await
+            .map_err(|e| {
+                log::error!("Failed to get image config: {}", e);
+                ContainerdError::GenerateSpecError(e.to_string())
+            })?;
+        let rt_conf = RuntimeConfig::try_from(image_conf)?;
+        let spec_path =
+            super::spec::generate_spec(&metadata.container_id, &metadata.namespace, &rt_conf)
+                .map_err(|e| {
+                    log::error!("Failed to generate spec: {}", e);
+                    ContainerdError::GenerateSpecError(e.to_string())
+                })?;
+        let spec = tokio::fs::read_to_string(spec_path).await.unwrap();
+        let spec = prost_types::Any {
+            type_url: "types.containerd.io/opencontainers/runtime-spec/1/Spec".to_string(),
+            value: spec.into_bytes(),
+        };
+        Ok(Some(spec))
+    }
 }
