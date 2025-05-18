@@ -1,6 +1,6 @@
 use std::net::IpAddr;
 
-use provider::types::function;
+use gateway::types::function;
 
 use crate::{consts, impls::BACKEND};
 
@@ -46,7 +46,7 @@ pub struct FunctionInstance {
     /// ip addr inside cni
     network: CNIEndpoint,
     // port: Vec<u16>, default use 8080
-    // manager: Weak<crate::provider::CtrdProvider>,
+    // manager: Weak<crate::provider::ContainerdProvider>,
 }
 
 impl FunctionInstance {

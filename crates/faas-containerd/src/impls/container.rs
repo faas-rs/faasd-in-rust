@@ -3,7 +3,7 @@ use containerd_client::{
     with_namespace,
 };
 
-use provider::types::function::Query;
+use gateway::types::function::Query;
 
 use crate::consts::DEFAULT_FUNCTION_NAMESPACE;
 

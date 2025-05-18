@@ -1,12 +1,10 @@
 use crate::impls::{self, BACKEND, function::ContainerStaticMetadata};
-use crate::provider_impl::CtrdProvider;
-use provider::handlers::function::DeployError;
+use crate::provider::ContainerdProvider;
+use gateway::handlers::function::DeployError;
+use gateway::types::function::Deployment;
 
-impl CtrdProvider {
-    pub(crate) async fn _deploy(
-        &self,
-        config: provider::types::function::Deployment,
-    ) -> Result<(), DeployError> {
+impl ContainerdProvider {
+    pub(crate) async fn _deploy(&self, config: Deployment) -> Result<(), DeployError> {
         let metadata = ContainerStaticMetadata::from(config);
 
         // not going to check the conflict of namespace, should be handled by containerd backend
@@ -33,7 +31,7 @@ impl CtrdProvider {
         let old = self
             .ctr_instance_map
             .lock()
-            .unwrap()
+            .await
             .insert(metadata.into(), container);
 
         if old.is_some() {

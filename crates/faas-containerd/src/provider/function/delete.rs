@@ -1,13 +1,13 @@
-use crate::provider_impl::CtrdProvider;
-use provider::handlers::function::DeleteError;
-use provider::types::function::Query;
+use crate::provider::ContainerdProvider;
+use gateway::handlers::function::DeleteError;
+use gateway::types::function::Query;
 
-impl CtrdProvider {
+impl ContainerdProvider {
     pub(crate) async fn _delete(&self, function: Query) -> Result<(), DeleteError> {
         let container = self
             .ctr_instance_map
             .lock()
-            .unwrap()
+            .await
             .remove(&function)
             .ok_or(DeleteError::NotFound)?;
 

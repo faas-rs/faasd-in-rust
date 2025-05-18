@@ -1,6 +1,3 @@
-// use tokio_util::task::TaskTracker;
-use async_trait::async_trait;
-
 use crate::{
     handlers::function::{DeleteError, DeployError, ResolveError},
     types::function::{Deployment, Query},

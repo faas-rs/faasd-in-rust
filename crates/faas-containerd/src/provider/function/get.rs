@@ -1,11 +1,11 @@
-use crate::provider_impl::CtrdProvider;
+use crate::provider::ContainerdProvider;
 
 pub enum GetError {
     NotFound,
     InternalError,
 }
 
-impl CtrdProvider {
+impl ContainerdProvider {
     // pub async fn getfn(
     //     &self,
     //     query: function::Query,

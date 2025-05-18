@@ -1,14 +1,14 @@
-use provider::handlers::function::ResolveError;
-use provider::types::function::Query;
+use gateway::handlers::function::ResolveError;
+use gateway::types::function::Query;
 
-use crate::provider_impl::CtrdProvider;
+use crate::provider::ContainerdProvider;
 
-impl CtrdProvider {
+impl ContainerdProvider {
     pub(crate) async fn _resolve(&self, query: Query) -> Result<url::Url, ResolveError> {
         let addr = self
             .ctr_instance_map
             .lock()
-            .unwrap()
+            .await
             .get(&query)
             .ok_or(ResolveError::NotFound)?
             .address();
