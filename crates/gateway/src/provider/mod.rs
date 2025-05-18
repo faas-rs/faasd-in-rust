@@ -1,6 +1,6 @@
 use crate::{
     handlers::function::{DeleteError, DeployError, ResolveError},
-    types::function::{Deployment, Query},
+    types::function::{Deployment, Query, Status},
 };
 
 pub trait Provider: Send + Sync + 'static {
@@ -10,8 +10,19 @@ pub trait Provider: Send + Sync + 'static {
         function: Query,
     ) -> impl std::future::Future<Output = Result<url::Url, ResolveError>> + Send;
 
-    /// Deploy a function
+    // `/system/functions` endpoint
+
+    /// Get a list of deployed functions
+    fn list(&self) -> impl std::future::Future<Output = Vec<Status>> + Send;
+
+    /// Deploy a new function
     fn deploy(
+        &self,
+        param: Deployment,
+    ) -> impl std::future::Future<Output = Result<(), DeployError>> + Send;
+
+    /// Update a function spec
+    fn update(
         &self,
         param: Deployment,
     ) -> impl std::future::Future<Output = Result<(), DeployError>> + Send;
@@ -22,5 +33,10 @@ pub trait Provider: Send + Sync + 'static {
         function: Query,
     ) -> impl std::future::Future<Output = Result<(), DeleteError>> + Send;
 
-    // fn task_tracker(&self) -> TaskTracker;
+    // `/system/function/{functionName}` endpoint
+    /// Get the status of a function by name
+    fn status(
+        &self,
+        function: Query,
+    ) -> impl std::future::Future<Output = Result<Status, ResolveError>> + Send;
 }

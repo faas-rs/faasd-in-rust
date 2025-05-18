@@ -5,7 +5,7 @@ use std::{collections::HashMap, sync::Arc};
 use gateway::{
     handlers::function::{DeleteError, DeployError, ResolveError},
     provider::Provider,
-    types::function::{Deployment, Query},
+    types::function::{Deployment, Query, Status},
 };
 
 use crate::impls::function::FunctionInstance;
@@ -25,24 +25,27 @@ impl ContainerdProvider {
 }
 
 impl Provider for ContainerdProvider {
-    fn resolve(
-        &self,
-        function: Query,
-    ) -> impl std::future::Future<Output = Result<url::Url, ResolveError>> + Send {
-        self._resolve(function)
+    async fn resolve(&self, function: Query) -> Result<url::Url, ResolveError> {
+        self._resolve(function).await
     }
 
-    fn deploy(
-        &self,
-        param: Deployment,
-    ) -> impl std::future::Future<Output = Result<(), DeployError>> + Send {
-        self._deploy(param)
+    async fn deploy(&self, param: Deployment) -> Result<(), DeployError> {
+        self._deploy(param).await
     }
 
-    fn delete(
-        &self,
-        function: Query,
-    ) -> impl std::future::Future<Output = Result<(), DeleteError>> + Send {
-        self._delete(function)
+    async fn delete(&self, function: Query) -> Result<(), DeleteError> {
+        self._delete(function).await
+    }
+
+    async fn list(&self) -> Vec<Status> {
+        unimplemented!()
+    }
+
+    async fn update(&self, _param: Deployment) -> Result<(), DeployError> {
+        unimplemented!()
+    }
+
+    async fn status(&self, _function: Query) -> Result<Status, ResolveError> {
+        unimplemented!()
     }
 }

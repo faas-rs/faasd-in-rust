@@ -42,14 +42,15 @@ pub fn serve<P: Provider>(provider: Arc<P>) -> std::io::Result<Server> {
                 web::scope("/system")
                     .service(
                         web::resource("/functions")
-                            // .route(web::get().to(handlers::function_list::function_list_handler))
+                            .route(web::get().to(handlers::function::list::<P>))
+                            .route(web::put().to(handlers::function::update::<P>))
                             .route(web::post().to(handlers::function::deploy::<P>))
                             .route(web::delete().to(handlers::function::delete::<P>)), // .route(web::put().to(handlers::update_function)),
                     )
-                    //         .service(
-                    //             web::resource("/function/{name}")
-                    //                 .route(web::get().to(handlers::function_status)),
-                    //         )
+                    .service(
+                        web::resource("/function/{functionName}")
+                            .route(web::get().to(handlers::function::status::<P>)),
+                    )
                     //         .service(
                     //             web::resource("/scale-function/{name}")
                     //                 .route(web::post().to(handlers::scale_function)),

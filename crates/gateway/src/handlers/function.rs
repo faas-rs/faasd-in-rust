@@ -5,6 +5,7 @@ use crate::provider::Provider;
 use crate::types::function::{Delete, Deployment, Query};
 use actix_web::ResponseError;
 use actix_web::{HttpResponse, web};
+use derive_more::derive::{Display, Error};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -36,6 +37,21 @@ pub async fn deploy<P: Provider>(
         .map(|()| HttpResponse::Accepted().finish())
 }
 
+pub async fn update<P: Provider>(
+    provider: web::Data<P>,
+    info: web::Json<Deployment>,
+) -> Result<HttpResponse, DeployError> {
+    (*provider)
+        .update(info.0)
+        .await
+        .map(|()| HttpResponse::Accepted().finish())
+}
+
+pub async fn list<P: Provider>(provider: web::Data<P>) -> HttpResponse {
+    let functions = (*provider).list().await;
+    HttpResponse::Ok().json(functions)
+}
+
 pub async fn delete<P: Provider>(
     provider: web::Data<P>,
     info: web::Json<Delete>,
@@ -47,60 +63,44 @@ pub async fn delete<P: Provider>(
         .map(|()| HttpResponse::Ok().finish())
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize)]
+pub struct StatusParam {
+    namespace: Option<String>,
+}
+
+pub async fn status<P: Provider>(
+    provider: web::Data<P>,
+    name: web::Path<String>,
+    info: web::Query<StatusParam>,
+) -> Result<HttpResponse, ResolveError> {
+    let query = Query {
+        service: name.into_inner(),
+        namespace: info.namespace.clone(),
+    };
+    let status = (*provider).status(query).await?;
+    Ok(HttpResponse::Ok().json(status))
+}
+
+#[derive(Debug, Display, Error)]
+pub enum DeployError {
+    Invalid,
+    InternalError,
+}
+
+#[derive(Debug, Display, Error)]
 pub enum DeleteError {
     Invalid,
     NotFound,
     Internal,
 }
 
-#[derive(Debug)]
-pub enum DeployError {
-    Invalid,
-    InternalError,
-}
-
-#[derive(Debug)]
+#[derive(Debug, Display, Error)]
 pub enum ResolveError {
     NotFound,
     Invalid,
     Internal,
 }
 
-impl std::fmt::Display for DeployError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            DeployError::Invalid => write!(f, "Invalid function deployment request"),
-            DeployError::InternalError => write!(f, "Internal error occurred"),
-        }
-    }
-}
-
-impl ResponseError for DeployError {
-    fn status_code(&self) -> actix_web::http::StatusCode {
-        match self {
-            DeployError::Invalid => actix_web::http::StatusCode::BAD_REQUEST,
-            DeployError::InternalError => actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
-        }
-    }
-}
-
-impl std::fmt::Display for DeleteError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            DeleteError::Invalid => write!(f, "Invalid function deletion request"),
-            DeleteError::NotFound => write!(f, "Function not found"),
-            DeleteError::Internal => write!(f, "Internal error occurred"),
-        }
-    }
-}
-
-impl ResponseError for DeleteError {
-    fn status_code(&self) -> actix_web::http::StatusCode {
-        match self {
-            DeleteError::Invalid => actix_web::http::StatusCode::BAD_REQUEST,
-            DeleteError::NotFound => actix_web::http::StatusCode::NOT_FOUND,
-            DeleteError::Internal => actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
-        }
-    }
-}
+impl ResponseError for DeployError {}
+impl ResponseError for DeleteError {}
+impl ResponseError for ResolveError {}
