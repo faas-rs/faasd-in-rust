@@ -4,7 +4,6 @@ pub mod provider;
 pub mod systemd;
 
 use tokio::signal::unix::{SignalKind, signal};
-use tokio_util::task::TaskTracker;
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
@@ -23,19 +22,9 @@ async fn main() -> std::io::Result<()> {
             _ = sigterm.recv() => log::info!("SIGTERM received, starting graceful shutdown..."),
             _ = sigquit.recv() => log::info!("SIGQUIT received, starting graceful shutdown..."),
         }
-        let tracker = TaskTracker::new();
-        handle
-            .ctr_instance_map
-            .lock()
-            .await
-            .drain()
-            .for_each(|(_q, container)| {
-                tracker.spawn(async move {
-                    let _ = container.delete().await;
-                });
-            });
-        tracker.close();
-        tracker.wait().await;
+        for (_q, ctr) in handle.ctr_instance_map.lock().await.drain() {
+            let _ = ctr.delete().await;
+        }
         log::info!("Successfully shutdown all containers");
     });
 
