@@ -15,8 +15,6 @@ pub struct ContainerdProvider {
 }
 
 impl ContainerdProvider {
-    /// Must be called under tokio runtime
-    /// This function will setup signal handlers for graceful shutdown
     pub fn new() -> Arc<Self> {
         Arc::new(ContainerdProvider {
             ctr_instance_map: tokio::sync::Mutex::new(HashMap::new()),

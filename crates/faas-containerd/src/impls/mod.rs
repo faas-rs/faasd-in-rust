@@ -25,14 +25,19 @@ impl Default for ContainerdService {
 }
 
 impl ContainerdService {
+    /// This is poor design, but we need to create the client in a tokio runtime
+    /// so that we can use it like a singleton.
     pub fn new() -> Self {
-        let client = tokio::runtime::Runtime::new().unwrap().block_on(async {
+        let handle = tokio::spawn(async {
             containerd_client::Client::from_path(
                 std::env::var("SOCKET_PATH").unwrap_or(String::from(DEFAULT_CTRD_SOCK)),
             )
             .await
             .expect("Failed to create containerd client")
         });
+        let client = tokio::runtime::Handle::current()
+            .block_on(handle)
+            .expect("Failed to create containerd client");
         ContainerdService {
             client: std::sync::Arc::new(client),
         }
