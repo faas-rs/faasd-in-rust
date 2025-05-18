@@ -7,9 +7,9 @@ pub mod snapshot;
 pub mod spec;
 pub mod task;
 
-lazy_static::lazy_static! {
-    pub static ref BACKEND: ContainerdService = ContainerdService::new();
-}
+use std::sync::LazyLock;
+
+pub static BACKEND: LazyLock<ContainerdService> = LazyLock::new(ContainerdService::new);
 
 const DEFAULT_CTRD_SOCK: &str = "/run/containerd/containerd.sock";
 
@@ -25,19 +25,23 @@ impl Default for ContainerdService {
 }
 
 impl ContainerdService {
-    /// This is poor design, but we need to create the client in a tokio runtime
-    /// so that we can use it like a singleton.
     pub fn new() -> Self {
-        let handle = tokio::spawn(async {
+        let fetch_client = async {
             containerd_client::Client::from_path(
                 std::env::var("SOCKET_PATH").unwrap_or(String::from(DEFAULT_CTRD_SOCK)),
             )
             .await
             .expect("Failed to create containerd client")
-        });
-        let client = tokio::runtime::Handle::current()
-            .block_on(handle)
-            .expect("Failed to create containerd client");
+        };
+        let client = if let Ok(handle) = tokio::runtime::Handle::try_current() {
+            // We're already in a runtime, use the current one
+            tokio::task::block_in_place(|| handle.block_on(fetch_client))
+        } else {
+            // We're not in a runtime, create a new one
+            tokio::runtime::Runtime::new()
+                .unwrap()
+                .block_on(fetch_client)
+        };
         ContainerdService {
             client: std::sync::Arc::new(client),
         }
