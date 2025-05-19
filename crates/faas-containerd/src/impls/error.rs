@@ -1,4 +1,5 @@
-#[derive(Debug)]
+use derive_more::derive::Display;
+#[derive(Debug, Display)]
 pub enum ContainerdError {
     CreateContainerError(String),
     CreateSnapshotError(String),

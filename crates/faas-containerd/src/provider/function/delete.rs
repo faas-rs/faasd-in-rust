@@ -9,12 +9,12 @@ impl ContainerdProvider {
             .lock()
             .await
             .remove(&function)
-            .ok_or(DeleteError::NotFound)?;
+            .ok_or(DeleteError::NotFound("container not found".to_string()))?;
 
         // delete the container
         container.delete().await.map_err(|e| {
             log::error!("Failed to delete container: {:?}", e);
-            DeleteError::Internal
+            DeleteError::Internal(e.to_string())
         })?;
 
         Ok(())

@@ -11,36 +11,49 @@ pub async fn deploy<P: Provider>(
     provider: web::Data<P>,
     info: web::Json<Deployment>,
 ) -> Result<HttpResponse, DeployError> {
-    (*provider)
-        .deploy(info.0)
-        .await
-        .map(|()| HttpResponse::Accepted().finish())
+    let service = info.0.service.clone();
+    (*provider).deploy(info.0).await.map(|()| {
+        HttpResponse::Accepted().body(format!("function {} was created successfully", service))
+    })
 }
 
 pub async fn update<P: Provider>(
     provider: web::Data<P>,
     info: web::Json<Deployment>,
-) -> Result<HttpResponse, DeployError> {
-    (*provider)
-        .update(info.0)
-        .await
-        .map(|()| HttpResponse::Accepted().finish())
-}
-
-pub async fn list<P: Provider>(provider: web::Data<P>) -> HttpResponse {
-    let functions = (*provider).list().await;
-    HttpResponse::Ok().json(functions)
+) -> Result<HttpResponse, UpdateError> {
+    let service = info.0.service.clone();
+    (*provider).update(info.0).await.map(|()| {
+        HttpResponse::Accepted().body(format!("function {} was updated successfully", service))
+    })
 }
 
 pub async fn delete<P: Provider>(
     provider: web::Data<P>,
     info: web::Json<Delete>,
 ) -> Result<HttpResponse, DeleteError> {
-    let query = Query::from(info.0);
+    let service = info.0.function_name.clone();
+    let query = Query {
+        service: service.clone(),
+        namespace: Some(info.0.namespace),
+    };
+    (*provider).delete(query).await.map(|()| {
+        HttpResponse::Ok().body(format!("function {} was deleted successfully", service))
+    })
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ListParam {
+    namespace: String,
+}
+
+pub async fn list<P: Provider>(
+    provider: web::Data<P>,
+    info: web::Query<ListParam>,
+) -> Result<HttpResponse, ListError> {
     (*provider)
-        .delete(query)
+        .list(info.namespace.clone())
         .await
-        .map(|()| HttpResponse::Ok().finish())
+        .map(|functions| HttpResponse::Ok().json(functions))
 }
 
 #[derive(Debug, Deserialize)]
@@ -65,29 +78,55 @@ pub async fn status<P: Provider>(
 
 #[derive(Debug, Display)]
 pub enum DeployError {
-    Invalid,
-    InternalError,
+    #[display("Invalid: {}", _0)]
+    Invalid(String),
+    #[display("Internal: {}", _0)]
+    InternalError(String),
 }
 
 #[derive(Debug, Display)]
 pub enum DeleteError {
-    Invalid,
-    NotFound,
-    Internal,
+    #[display("Invalid: {}", _0)]
+    Invalid(String),
+    #[display("NotFound: {}", _0)]
+    NotFound(String),
+    #[display("Internal: {}", _0)]
+    Internal(String),
 }
 
 #[derive(Debug, Display)]
 pub enum ResolveError {
-    NotFound,
-    Invalid,
-    Internal,
+    #[display("NotFound: {}", _0)]
+    NotFound(String),
+    #[display("Invalid: {}", _0)]
+    Invalid(String),
+    #[display("Internal: {}", _0)]
+    Internal(String),
+}
+
+#[derive(Debug, Display)]
+pub enum ListError {
+    #[display("Internal: {}", _0)]
+    Internal(String),
+    #[display("NotFound: {}", _0)]
+    NotFound(String),
+}
+
+#[derive(Debug, Display)]
+pub enum UpdateError {
+    #[display("Invalid: {}", _0)]
+    Invalid(String),
+    #[display("Internal: {}", _0)]
+    Internal(String),
+    #[display("NotFound:{}", _0)]
+    NotFound(String),
 }
 
 impl ResponseError for DeployError {
     fn status_code(&self) -> awc::http::StatusCode {
         match self {
-            DeployError::Invalid => awc::http::StatusCode::BAD_REQUEST,
-            DeployError::InternalError => awc::http::StatusCode::INTERNAL_SERVER_ERROR,
+            DeployError::Invalid(_) => awc::http::StatusCode::BAD_REQUEST,
+            DeployError::InternalError(_) => awc::http::StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 }
@@ -95,9 +134,9 @@ impl ResponseError for DeployError {
 impl ResponseError for DeleteError {
     fn status_code(&self) -> awc::http::StatusCode {
         match self {
-            DeleteError::Invalid => awc::http::StatusCode::BAD_REQUEST,
-            DeleteError::NotFound => awc::http::StatusCode::NOT_FOUND,
-            DeleteError::Internal => awc::http::StatusCode::INTERNAL_SERVER_ERROR,
+            DeleteError::Invalid(_) => awc::http::StatusCode::BAD_REQUEST,
+            DeleteError::NotFound(_) => awc::http::StatusCode::NOT_FOUND,
+            DeleteError::Internal(_) => awc::http::StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 }
@@ -105,9 +144,28 @@ impl ResponseError for DeleteError {
 impl ResponseError for ResolveError {
     fn status_code(&self) -> awc::http::StatusCode {
         match self {
-            ResolveError::NotFound => awc::http::StatusCode::NOT_FOUND,
-            ResolveError::Invalid => awc::http::StatusCode::BAD_REQUEST,
-            ResolveError::Internal => awc::http::StatusCode::INTERNAL_SERVER_ERROR,
+            ResolveError::NotFound(_) => awc::http::StatusCode::NOT_FOUND,
+            ResolveError::Invalid(_) => awc::http::StatusCode::BAD_REQUEST,
+            ResolveError::Internal(_) => awc::http::StatusCode::INTERNAL_SERVER_ERROR,
+        }
+    }
+}
+
+impl ResponseError for ListError {
+    fn status_code(&self) -> awc::http::StatusCode {
+        match self {
+            ListError::Internal(_) => awc::http::StatusCode::INTERNAL_SERVER_ERROR,
+            ListError::NotFound(_) => awc::http::StatusCode::NOT_FOUND,
+        }
+    }
+}
+
+impl ResponseError for UpdateError {
+    fn status_code(&self) -> awc::http::StatusCode {
+        match self {
+            UpdateError::Invalid(_) => awc::http::StatusCode::BAD_REQUEST,
+            UpdateError::Internal(_) => awc::http::StatusCode::INTERNAL_SERVER_ERROR,
+            UpdateError::NotFound(_) => awc::http::StatusCode::NOT_FOUND,
         }
     }
 }

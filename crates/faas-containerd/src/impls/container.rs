@@ -3,6 +3,7 @@ use containerd_client::{
     with_namespace,
 };
 
+use derive_more::Display;
 use gateway::types::function::Query;
 
 use crate::consts::DEFAULT_FUNCTION_NAMESPACE;
@@ -12,7 +13,7 @@ use containerd_client::services::v1::container::Runtime;
 use super::{ContainerdService, backend, function::ContainerStaticMetadata};
 use tonic::Request;
 
-#[derive(Debug)]
+#[derive(Debug, Display)]
 pub enum ContainerError {
     NotFound,
     AlreadyExists,

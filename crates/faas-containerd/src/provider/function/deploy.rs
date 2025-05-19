@@ -15,8 +15,8 @@ impl ContainerdProvider {
                 use impls::oci_image::ImageError;
                 log::error!("Image '{}' fetch failed: {}", &metadata.image, img_err);
                 match img_err {
-                    ImageError::ImageNotFound(_) => DeployError::Invalid,
-                    _ => DeployError::InternalError,
+                    ImageError::ImageNotFound(e) => DeployError::Invalid(e.to_string()),
+                    _ => DeployError::InternalError(img_err.to_string()),
                 }
             })?;
         log::trace!("Image '{}' fetch ok", &metadata.image);
@@ -25,8 +25,12 @@ impl ContainerdProvider {
             .await
             .map_err(|e| {
                 log::error!("Failed to create container: {:?}", e);
-                DeployError::InternalError
+                DeployError::InternalError(e.to_string())
             })?;
+        log::info!(
+            "container was created successfully: {}",
+            metadata.container_id.clone()
+        );
 
         let old = self
             .ctr_instance_map
