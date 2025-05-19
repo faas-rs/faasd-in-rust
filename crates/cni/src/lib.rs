@@ -14,7 +14,6 @@ lazy_static! {
         std::env::var("CNI_CONF_DIR").expect("Environment variable CNI_CONF_DIR is not set");
 }
 
-// const NET_NS_PATH_FMT: &str = "/proc/{}/ns/net";
 const CNI_DATA_DIR: &str = "/var/run/cni";
 const DEFAULT_CNI_CONF_FILENAME: &str = "10-faasrs.conflist";
 const DEFAULT_NETWORK_NAME: &str = "faasrs-cni-bridge";

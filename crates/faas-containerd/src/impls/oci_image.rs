@@ -13,8 +13,6 @@ use containerd_client::{
 };
 use oci_spec::image::{Arch, ImageConfiguration, ImageIndex, ImageManifest, MediaType, Os};
 
-use super::spec::DEFAULT_NAMESPACE;
-
 impl ContainerdService {
     async fn get_image(&self, image_name: &str, ns: &str) -> Result<(), ImageError> {
         let mut c = self.client.images();
@@ -316,7 +314,7 @@ pub fn get_resolver() {
 
 fn check_namespace(ns: &str) -> String {
     match ns {
-        "" => DEFAULT_NAMESPACE.to_string(),
+        "" => crate::consts::DEFAULT_FUNCTION_NAMESPACE.to_string(),
         _ => ns.to_string(),
     }
 }

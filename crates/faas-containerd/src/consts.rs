@@ -1,14 +1,14 @@
 #[allow(unused)]
-pub const DEFAULT_FUNCTION_NAMESPACE: &str = "default";
-
-#[allow(unused)]
-pub const NAMESPACE_LABEL: &str = "faasrs";
-
-#[allow(unused)]
-pub const FAASRS_NAMESPACE: &str = "faasrs";
-
-#[allow(unused)]
-pub const FAASRS_SERVICE_PULL_ALWAYS: bool = false;
+pub const DEFAULT_FUNCTION_NAMESPACE: &str = "faasrs-default";
 
 #[allow(unused)]
 pub const DEFAULT_SNAPSHOTTER: &str = "overlayfs";
+
+pub const DEFAULT_CTRD_SOCK: &str = "/run/containerd/containerd.sock";
+
+
+// 定义版本的常量
+pub const VERSION_MAJOR: u32 = 1;
+pub const VERSION_MINOR: u32 = 1;
+pub const VERSION_PATCH: u32 = 0;
+pub const VERSION_DEV: &str = ""; // 对应开发分支

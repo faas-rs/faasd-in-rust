@@ -17,7 +17,7 @@ impl ContainerdService {
     ) -> Result<Vec<Mount>, ContainerdError> {
         let mut sc = self.client.snapshots();
         let req = MountsRequest {
-            snapshotter: "overlayfs".to_string(),
+            snapshotter: crate::consts::DEFAULT_SNAPSHOTTER.to_string(),
             key: cid.to_string(),
         };
         let mounts = sc
@@ -57,7 +57,7 @@ impl ContainerdService {
         parent_snapshot: String,
     ) -> Result<(), ContainerdError> {
         let req = PrepareSnapshotRequest {
-            snapshotter: "overlayfs".to_string(),
+            snapshotter: crate::consts::DEFAULT_SNAPSHOTTER.to_string(),
             key: cid.to_string(),
             parent: parent_snapshot,
             ..Default::default()
@@ -117,7 +117,7 @@ impl ContainerdService {
     pub async fn remove_snapshot(&self, cid: &str, ns: &str) -> Result<(), ContainerdError> {
         let mut sc = self.client.snapshots();
         let req = RemoveSnapshotRequest {
-            snapshotter: "overlayfs".to_string(),
+            snapshotter: crate::consts::DEFAULT_SNAPSHOTTER.to_string(),
             key: cid.to_string(),
         };
         sc.remove(with_namespace!(req, ns)).await.map_err(|e| {

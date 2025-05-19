@@ -17,12 +17,10 @@ pub(crate) fn backend() -> &'static ContainerdService {
 
 /// TODO: Panic on failure, should be handled in a better way
 pub async fn init_backend() {
-    let socket = std::env::var("SOCK_PATH").unwrap_or(DEFAULT_CTRD_SOCK.to_string());
+    let socket = std::env::var("SOCK_PATH").unwrap_or(crate::consts::DEFAULT_CTRD_SOCK.to_string());
     let client = containerd_client::Client::from_path(socket).await.unwrap();
     __BACKEND.set(ContainerdService { client }).ok().unwrap();
 }
-
-const DEFAULT_CTRD_SOCK: &str = "/run/containerd/containerd.sock";
 
 pub struct ContainerdService {
     pub client: containerd_client::Client,

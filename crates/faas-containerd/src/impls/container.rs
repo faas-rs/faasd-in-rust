@@ -37,7 +37,7 @@ impl ContainerdService {
                 log::error!("Failed to get spec");
                 ContainerError::Internal
             })?),
-            snapshotter: "overlayfs".to_string(),
+            snapshotter: crate::consts::DEFAULT_SNAPSHOTTER.to_string(),
             snapshot_key: metadata.container_id.clone(),
             ..Default::default()
         };

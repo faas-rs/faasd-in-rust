@@ -35,5 +35,3 @@ impl HttpMetrics {
         }
     }
 }
-
-pub const TEXT_CONTENT_TYPE: &str = "text/plain; version=0.0.4";

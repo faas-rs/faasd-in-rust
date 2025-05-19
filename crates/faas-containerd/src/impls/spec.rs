@@ -1,4 +1,5 @@
 use super::{ContainerdService, error::ContainerdError, function::ContainerStaticMetadata};
+use crate::consts::{VERSION_DEV, VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH};
 use oci_spec::{
     image::ImageConfiguration,
     runtime::{
@@ -8,14 +9,6 @@ use oci_spec::{
     },
 };
 use std::path::Path;
-
-pub const DEFAULT_NAMESPACE: &str = "default";
-
-// 定义版本的常量
-const VERSION_MAJOR: u32 = 1;
-const VERSION_MINOR: u32 = 1;
-const VERSION_PATCH: u32 = 0;
-const VERSION_DEV: &str = ""; // 对应开发分支
 
 fn oci_version() -> String {
     format!(
