@@ -113,12 +113,12 @@ impl FunctionInstance {
                 e
             });
         if kill_err.is_ok() && del_ctr_err.is_ok() && rm_snap_err.is_ok() {
-            return Ok(());
+            Ok(())
         } else {
-            return Err(ContainerdError::DeleteContainerError(format!(
+            Err(ContainerdError::DeleteContainerError(format!(
                 "{:?}, {:?}, {:?}",
                 kill_err, del_ctr_err, rm_snap_err
-            )));
+            )))
         }
     }
 
