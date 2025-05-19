@@ -53,6 +53,9 @@ mod tests {
     fn test_ip_parsing() {
         let raw_ip = "10.42.0.48/16";
         let ipcidr = raw_ip.parse::<cidr::IpInet>().unwrap();
-        assert_eq!(ipcidr.address(), std::net::IpAddr::V4(std::net::Ipv4Addr::new(10, 42, 0, 48)));
+        assert_eq!(
+            ipcidr.address(),
+            std::net::IpAddr::V4(std::net::Ipv4Addr::new(10, 42, 0, 48))
+        );
     }
 }

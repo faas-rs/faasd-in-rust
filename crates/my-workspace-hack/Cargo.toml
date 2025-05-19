@@ -17,11 +17,10 @@ publish = false
 [dependencies]
 actix-router = { version = "0.5", default-features = false, features = ["http", "unicode"] }
 bytes = { version = "1" }
-futures-channel = { version = "0.3", features = ["sink"] }
-futures-io = { version = "0.3" }
-futures-util = { version = "0.3", features = ["channel", "io", "sink"] }
+futures-task = { version = "0.3", default-features = false, features = ["std"] }
+futures-util = { version = "0.3", features = ["sink"] }
 log = { version = "0.4", default-features = false, features = ["std"] }
-memchr = { version = "2", features = ["use_std"] }
+memchr = { version = "2" }
 mio = { version = "1", features = ["net", "os-ext"] }
 prost = { version = "0.13", features = ["prost-derive"] }
 regex = { version = "1" }
@@ -38,7 +37,7 @@ tracing-core = { version = "0.1", default-features = false, features = ["std"] }
 actix-router = { version = "0.5", default-features = false, features = ["http", "unicode"] }
 bytes = { version = "1" }
 log = { version = "0.4", default-features = false, features = ["std"] }
-memchr = { version = "2", features = ["use_std"] }
+memchr = { version = "2" }
 prost = { version = "0.13", features = ["prost-derive"] }
 regex = { version = "1" }
 regex-automata = { version = "0.4", default-features = false, features = ["dfa-onepass", "hybrid", "meta", "nfa-backtrack", "perf-inline", "perf-literal", "unicode"] }
@@ -49,18 +48,22 @@ tracing = { version = "0.1", features = ["log"] }
 tracing-core = { version = "0.1", default-features = false, features = ["std"] }
 
 [target.x86_64-unknown-linux-gnu.dependencies]
+bitflags = { version = "2", default-features = false, features = ["std"] }
 getrandom = { version = "0.2", default-features = false, features = ["std"] }
 libc = { version = "0.2", features = ["extra_traits"] }
 
 [target.x86_64-unknown-linux-gnu.build-dependencies]
+bitflags = { version = "2", default-features = false, features = ["std"] }
 getrandom = { version = "0.2", default-features = false, features = ["std"] }
 libc = { version = "0.2", features = ["extra_traits"] }
 
 [target.aarch64-unknown-linux-gnu.dependencies]
+bitflags = { version = "2", default-features = false, features = ["std"] }
 getrandom = { version = "0.2", default-features = false, features = ["std"] }
 libc = { version = "0.2", features = ["extra_traits"] }
 
 [target.aarch64-unknown-linux-gnu.build-dependencies]
+bitflags = { version = "2", default-features = false, features = ["std"] }
 getrandom = { version = "0.2", default-features = false, features = ["std"] }
 libc = { version = "0.2", features = ["extra_traits"] }
 

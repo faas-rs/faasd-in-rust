@@ -54,10 +54,19 @@ impl FunctionInstance {
     pub async fn new(metadata: ContainerStaticMetadata) -> Result<Self, ContainerdError> {
         backend().prepare_snapshot(&metadata).await?;
 
-        let container = backend().create_container(&metadata).await.map_err(|e| {
-            log::error!("Failed to create container: {:?}", e);
-            ContainerdError::CreateContainerError(String::new())
-        })?;
+        let container_result = backend().create_container(&metadata).await;
+
+        if container_result.is_err() {
+            log::error!("Failed to create container: {:?}", container_result);
+            if let Err(e) = backend()
+                .remove_snapshot(&metadata.container_id, &metadata.namespace)
+                .await
+            {
+                log::error!("Failed to remove snapshot: {:?}", e);
+            }
+            return Err(ContainerdError::CreateContainerError(String::new()));
+        }
+        let container = container_result.unwrap();
 
         let network = CNIEndpoint::new(&metadata.container_id, &metadata.namespace)?;
 
@@ -80,17 +89,37 @@ impl FunctionInstance {
         let container_id = self.container.id.clone();
         let namespace = self.namespace.clone();
 
-        backend()
+        let kill_err = backend()
             .kill_task_with_timeout(&container_id, &namespace)
-            .await?;
+            .await
+            .map_err(|e| {
+                log::error!("Failed to kill task: {:?}", e);
+                e
+            });
 
-        backend()
+        let del_ctr_err = backend()
             .delete_container(&container_id, &namespace)
             .await
             .map_err(|e| {
                 log::error!("Failed to delete container: {:?}", e);
-                ContainerdError::DeleteContainerError(String::new())
-            })
+                e
+            });
+
+        let rm_snap_err = backend()
+            .remove_snapshot(&container_id, &namespace)
+            .await
+            .map_err(|e| {
+                log::error!("Failed to remove snapshot: {:?}", e);
+                e
+            });
+        if kill_err.is_ok() && del_ctr_err.is_ok() && rm_snap_err.is_ok() {
+            return Ok(());
+        } else {
+            return Err(ContainerdError::DeleteContainerError(format!(
+                "{:?}, {:?}, {:?}",
+                kill_err, del_ctr_err, rm_snap_err
+            )));
+        }
     }
 
     pub fn address(&self) -> IpAddr {

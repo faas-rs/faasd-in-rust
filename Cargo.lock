@@ -960,7 +960,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2dff15bf788c671c1934e366d07e30c1814a8ef514e1af724a602e8a2fbe1b10"
 dependencies = [
  "futures-core",
- "futures-sink",
 ]
 
 [[package]]
@@ -1004,13 +1003,10 @@ version = "0.3.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9fa08315bb612088cc391249efdc3bc77536f16c91f6cf495e6fbe85b20a4a81"
 dependencies = [
- "futures-channel",
  "futures-core",
- "futures-io",
  "futures-macro",
  "futures-sink",
  "futures-task",
- "memchr",
  "pin-project-lite",
  "pin-utils",
  "slab",
@@ -1679,9 +1675,9 @@ name = "my-workspace-hack"
 version = "0.1.0"
 dependencies = [
  "actix-router",
+ "bitflags 2.8.0",
  "bytes",
- "futures-channel",
- "futures-io",
+ "futures-task",
  "futures-util",
  "getrandom 0.2.15",
  "libc",

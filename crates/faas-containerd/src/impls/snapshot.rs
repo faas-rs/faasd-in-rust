@@ -1,5 +1,5 @@
 use containerd_client::{
-    services::v1::snapshots::{MountsRequest, PrepareSnapshotRequest},
+    services::v1::snapshots::{MountsRequest, PrepareSnapshotRequest, RemoveSnapshotRequest},
     types::Mount,
     with_namespace,
 };
@@ -112,5 +112,19 @@ impl ContainerdService {
             ret = format!("sha256:{digest}");
         }
         Ok(ret)
+    }
+
+    pub async fn remove_snapshot(&self, cid: &str, ns: &str) -> Result<(), ContainerdError> {
+        let mut sc = self.client.snapshots();
+        let req = RemoveSnapshotRequest {
+            snapshotter: "overlayfs".to_string(),
+            key: cid.to_string(),
+        };
+        sc.remove(with_namespace!(req, ns)).await.map_err(|e| {
+            log::error!("Failed to delete snapshot: {}", e);
+            ContainerdError::DeleteContainerError(e.to_string())
+        })?;
+
+        Ok(())
     }
 }
