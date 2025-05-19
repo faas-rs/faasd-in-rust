@@ -32,10 +32,10 @@ impl ContainerdService {
                 name: "io.containerd.runc.v2".to_string(),
                 options: None,
             }),
-            spec: BACKEND.get_spec(metadata).await.map_err(|e| {
-                log::error!("Failed to get spec: {:?}", e);
+            spec: Some(BACKEND.get_spec(metadata).await.map_err(|_| {
+                log::error!("Failed to get spec");
                 ContainerError::Internal
-            })?,
+            })?),
             snapshotter: "overlayfs".to_string(),
             snapshot_key: metadata.container_id.clone(),
             ..Default::default()
