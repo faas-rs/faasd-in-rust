@@ -29,11 +29,7 @@ impl From<ContainerStaticMetadata> for function::Query {
     fn from(metadata: ContainerStaticMetadata) -> Self {
         function::Query {
             service: metadata.container_id,
-            namespace: if metadata.namespace == consts::DEFAULT_FUNCTION_NAMESPACE {
-                None
-            } else {
-                Some(metadata.namespace)
-            },
+            namespace: Some(metadata.namespace),
         }
     }
 }
@@ -47,7 +43,6 @@ pub struct FunctionInstance {
     network: CNIEndpoint,
     // port: Vec<u16>, default use 8080
     // manager: Weak<crate::provider::ContainerdProvider>,
-    _created_at: chrono::DateTime<chrono::Utc>,
 }
 
 impl FunctionInstance {
@@ -71,7 +66,7 @@ impl FunctionInstance {
         let network = CNIEndpoint::new(&metadata.container_id, &metadata.namespace)?;
 
         // TODO: Use ostree-ext
-        // let img_conf = BACKEND.get_runtime_config(&metadata.image).unwrap();
+        // let img_conf = BACKEND.get().unwrap().get_runtime_config(&metadata.image).unwrap();
 
         backend()
             .new_task(&metadata.container_id, &metadata.namespace)
@@ -81,7 +76,6 @@ impl FunctionInstance {
             container,
             namespace: metadata.namespace,
             network,
-            _created_at: chrono::Utc::now(),
         })
     }
 

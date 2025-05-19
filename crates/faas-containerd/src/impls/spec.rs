@@ -134,7 +134,7 @@ pub(super) fn generate_default_unix_spec(
                         .unwrap(),
                     LinuxNamespaceBuilder::default()
                         .typ(LinuxNamespaceType::Network)
-                        .path(netns(ns, cid))
+                        .path(format!("/var/run/netns/{}", netns(ns, cid)))
                         .build()
                         .unwrap(),
                 ])
@@ -285,7 +285,7 @@ impl ContainerdService {
         let rt_conf = RuntimeConfig::try_from(image_conf)?;
 
         let spec =
-            generate_default_unix_spec(&metadata.container_id, &metadata.namespace, &rt_conf)?;
+            generate_default_unix_spec(&metadata.namespace, &metadata.container_id, &rt_conf)?;
         let spec_json = serde_json::to_string(&spec).map_err(|e| {
             log::error!("Failed to serialize spec to JSON: {}", e);
             ContainerdError::GenerateSpecError(e.to_string())

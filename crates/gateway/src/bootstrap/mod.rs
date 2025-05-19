@@ -22,44 +22,44 @@ pub fn config_app<P: Provider>(provider: Arc<P>) -> impl FnOnce(&mut ServiceConf
         credentials: None,
     });
     move |cfg: &mut ServiceConfig| {
-        cfg.app_data(app_state).app_data(provider).service(
-            web::scope("/system")
-                .service(
-                    web::resource("/functions")
-                        .route(web::get().to(handlers::function::list::<P>))
-                        .route(web::put().to(handlers::function::update::<P>))
-                        .route(web::post().to(handlers::function::deploy::<P>))
-                        .route(web::delete().to(handlers::function::delete::<P>)), // .route(web::put().to(handlers::update_function)),
-                )
-                .service(
-                    web::resource("/function/{functionName}")
-                        .route(web::get().to(handlers::function::status::<P>)),
-                )
-                //         .service(
-                //             web::resource("/scale-function/{name}")
-                //                 .route(web::post().to(handlers::scale_function)),
-                //         )
-                //         .service(web::resource("/info").route(web::get().to(handlers::info)))
-                //         .service(
-                //             web::resource("/secrets")
-                //                 .route(web::get().to(handlers::secrets))
-                //                 .route(web::post().to(handlers::secrets))
-                //                 .route(web::put().to(handlers::secrets))
-                //                 .route(web::delete().to(handlers::secrets)),
-                //         )
-                //         .service(web::resource("/logs").route(web::get().to(handlers::logs)))
-                //         .service(
-                //             web::resource("/namespaces")
-                //                 .route(web::get().to(handlers::list_namespaces))
-                //                 .route(web::post().to(handlers::mutate_namespace)),
-                //         ),
-                // )
-                .service(
-                    web::scope("/function").service(
-                        web::resource("/{name}").route(web::to(handlers::proxy::proxy::<P>)),
-                    ),
-                ),
-        );
+        cfg.app_data(app_state)
+            .app_data(provider)
+            .service(
+                web::scope("/system")
+                    .service(
+                        web::resource("/functions")
+                            .route(web::get().to(handlers::function::list::<P>))
+                            .route(web::put().to(handlers::function::update::<P>))
+                            .route(web::post().to(handlers::function::deploy::<P>))
+                            .route(web::delete().to(handlers::function::delete::<P>)), // .route(web::put().to(handlers::update_function)),
+                    )
+                    .service(
+                        web::resource("/function/{functionName}")
+                            .route(web::get().to(handlers::function::status::<P>)),
+                    ), //         .service(
+                       //             web::resource("/scale-function/{name}")
+                       //                 .route(web::post().to(handlers::scale_function)),
+                       //         )
+                       //         .service(web::resource("/info").route(web::get().to(handlers::info)))
+                       //         .service(
+                       //             web::resource("/secrets")
+                       //                 .route(web::get().to(handlers::secrets))
+                       //                 .route(web::post().to(handlers::secrets))
+                       //                 .route(web::put().to(handlers::secrets))
+                       //                 .route(web::delete().to(handlers::secrets)),
+                       //         )
+                       //         .service(web::resource("/logs").route(web::get().to(handlers::logs)))
+                       //         .service(
+                       //             web::resource("/namespaces")
+                       //                 .route(web::get().to(handlers::list_namespaces))
+                       //                 .route(web::post().to(handlers::mutate_namespace)),
+                       //         ),
+                       // )
+            )
+            .service(
+                web::scope("/function")
+                    .service(web::resource("/{name}").route(web::to(handlers::proxy::proxy::<P>))),
+            );
         // .route("/metrics", web::get().to(handlers::telemetry))
         // .route("/healthz", web::get().to(handlers::health));
     }
@@ -70,6 +70,7 @@ pub fn config_app<P: Provider>(provider: Arc<P>) -> impl FnOnce(&mut ServiceConf
 #[allow(dead_code)]
 struct AppState {
     // config: FaaSConfig,   //应用程序的配置，用于识别是否开启Basic Auth等
+    // metrics: HttpMetrics, //用于监视http请求的持续时间和总数
     // metrics: HttpMetrics, //用于监视http请求的持续时间和总数
     credentials: Option<HashMap<String, String>>, //当有认证信息的时候，获取认证信息
 }

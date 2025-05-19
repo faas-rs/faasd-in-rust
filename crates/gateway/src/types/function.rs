@@ -156,12 +156,7 @@ impl From<&str> for Query {
 pub struct Delete {
     /// Name of deployed function
     pub function_name: String,
-}
-
-impl From<Delete> for Query {
-    fn from(delete: Delete) -> Self {
-        Self::from(delete.function_name.as_str())
-    }
+    pub namespace: String,
 }
 
 const fn default_read_only_root_filesystem() -> bool {

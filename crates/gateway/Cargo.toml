@@ -21,3 +21,4 @@ url = "2.4"
 derive_more = { version = "2", features = ["full"] }
 tonic = "0.12"
 tokio-util = "*"
+chrono = "0.4.41"
