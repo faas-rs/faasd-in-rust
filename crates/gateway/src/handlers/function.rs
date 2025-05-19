@@ -1,29 +1,9 @@
-use std::collections::HashMap;
-use std::time::SystemTime;
-
 use crate::provider::Provider;
 use crate::types::function::{Delete, Deployment, Query};
 use actix_web::ResponseError;
 use actix_web::{HttpResponse, web};
-use derive_more::derive::{Display, Error};
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Function {
-    pub name: String,
-    pub namespace: String,
-    pub image: String,
-    pub pid: u32,
-    pub replicas: i32,
-    pub address: String,
-    pub labels: HashMap<String, String>,
-    // pub annotations: HashMap<String, String>,
-    // pub secrets: Vec<String>,
-    pub env_vars: HashMap<String, String>,
-    pub env_process: String,
-    // pub memory_limit: i64,
-    pub created_at: SystemTime,
-}
+use derive_more::derive::Display;
+use serde::Deserialize;
 
 // 参考响应状态 https://github.com/openfaas/faas/blob/7803ea1861f2a22adcbcfa8c79ed539bc6506d5b/api-docs/spec.openapi.yml#L121C1-L140C45
 // 请求体反序列化失败，自动返回400错误
@@ -81,26 +61,53 @@ pub async fn status<P: Provider>(
     Ok(HttpResponse::Ok().json(status))
 }
 
-#[derive(Debug, Display, Error)]
+// TODO: 为 Errors 添加错误信息
+
+#[derive(Debug, Display)]
 pub enum DeployError {
     Invalid,
     InternalError,
 }
 
-#[derive(Debug, Display, Error)]
+#[derive(Debug, Display)]
 pub enum DeleteError {
     Invalid,
     NotFound,
     Internal,
 }
 
-#[derive(Debug, Display, Error)]
+#[derive(Debug, Display)]
 pub enum ResolveError {
     NotFound,
     Invalid,
     Internal,
 }
 
-impl ResponseError for DeployError {}
-impl ResponseError for DeleteError {}
-impl ResponseError for ResolveError {}
+impl ResponseError for DeployError {
+    fn status_code(&self) -> awc::http::StatusCode {
+        match self {
+            DeployError::Invalid => awc::http::StatusCode::BAD_REQUEST,
+            DeployError::InternalError => awc::http::StatusCode::INTERNAL_SERVER_ERROR,
+        }
+    }
+}
+
+impl ResponseError for DeleteError {
+    fn status_code(&self) -> awc::http::StatusCode {
+        match self {
+            DeleteError::Invalid => awc::http::StatusCode::BAD_REQUEST,
+            DeleteError::NotFound => awc::http::StatusCode::NOT_FOUND,
+            DeleteError::Internal => awc::http::StatusCode::INTERNAL_SERVER_ERROR,
+        }
+    }
+}
+
+impl ResponseError for ResolveError {
+    fn status_code(&self) -> awc::http::StatusCode {
+        match self {
+            ResolveError::NotFound => awc::http::StatusCode::NOT_FOUND,
+            ResolveError::Invalid => awc::http::StatusCode::BAD_REQUEST,
+            ResolveError::Internal => awc::http::StatusCode::INTERNAL_SERVER_ERROR,
+        }
+    }
+}

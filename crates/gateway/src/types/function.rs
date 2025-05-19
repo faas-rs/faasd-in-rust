@@ -1,3 +1,5 @@
+// https://github.com/openfaas/faas/blob/7803ea1861f2a22adcbcfa8c79ed539bc6506d5b/api-docs/spec.openapi.yml
+
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};

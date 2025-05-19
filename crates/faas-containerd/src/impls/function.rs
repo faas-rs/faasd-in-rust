@@ -47,6 +47,7 @@ pub struct FunctionInstance {
     network: CNIEndpoint,
     // port: Vec<u16>, default use 8080
     // manager: Weak<crate::provider::ContainerdProvider>,
+    created_at: chrono::DateTime<chrono::Utc>,
 }
 
 impl FunctionInstance {
@@ -71,6 +72,7 @@ impl FunctionInstance {
             container,
             namespace: metadata.namespace,
             network,
+            created_at: chrono::Utc::now(),
         })
     }
 
