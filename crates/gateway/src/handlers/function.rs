@@ -36,9 +36,10 @@ pub async fn delete<P: Provider>(
         service: service.clone(),
         namespace: Some(info.0.namespace),
     };
-    (*provider).delete(query).await.map(|()| {
-        HttpResponse::Ok().body(format!("function {} was deleted successfully", service))
-    })
+    (*provider)
+        .delete(query)
+        .await
+        .map(|()| HttpResponse::Ok().body(format!("function {} was deleted successfully", service)))
 }
 
 #[derive(Debug, Deserialize)]

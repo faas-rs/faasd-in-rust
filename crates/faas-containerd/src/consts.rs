@@ -6,7 +6,6 @@ pub const DEFAULT_SNAPSHOTTER: &str = "overlayfs";
 
 pub const DEFAULT_CTRD_SOCK: &str = "/run/containerd/containerd.sock";
 
-
 // 定义版本的常量
 pub const VERSION_MAJOR: u32 = 1;
 pub const VERSION_MINOR: u32 = 1;
