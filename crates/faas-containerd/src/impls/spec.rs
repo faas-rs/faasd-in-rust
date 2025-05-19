@@ -245,15 +245,14 @@ fn default_mounts() -> Vec<Mount> {
             ],
         },
         Mount {
-            destination: "/sys/fs/cgroup".to_string(),
-            type_: "cgroup".to_string(),
-            source: "cgroup".to_string(),
+            destination: "/run".to_string(),
+            type_: "tmpfs".to_string(),
+            source: "tmpfs".to_string(),
             options: vec![
                 "nosuid".to_string(),
-                "noexec".to_string(),
-                "nodev".to_string(),
-                "relatime".to_string(),
-                "ro".to_string(),
+                "strictatime".to_string(),
+                "mode=755".to_string(),
+                "size=65536k".to_string(),
             ],
         },
     ]
