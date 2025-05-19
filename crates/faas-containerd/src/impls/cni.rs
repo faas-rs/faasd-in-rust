@@ -6,8 +6,7 @@ use crate::impls::error::ContainerdError;
 pub struct CNIEndpoint {
     pub cid: String,
     pub ns: String,
-    pub raw_ip: String,
-    pub ips: Vec<IpAddr>,
+    pub ipcidr: cidr::IpInet,
 }
 
 impl CNIEndpoint {
@@ -18,34 +17,16 @@ impl CNIEndpoint {
         })?;
         log::trace!("CNI network created with Raw IP: {:?}", raw_ip);
 
-        let mut ips: Vec<IpAddr> = Vec::new();
-        for ip in raw_ip.split('/') {
-            if let Ok(parsed_ip) = ip.parse::<IpAddr>() {
-                ips.push(parsed_ip);
-            } else {
-                log::error!("Failed to parse IP address: {}", ip);
-                return Err(ContainerdError::CreateContainerError(format!(
-                    "Failed to parse IP address: {}",
-                    ip
-                )));
-            }
-        }
+        let ipcidr = raw_ip.parse::<cidr::IpInet>().map_err(|e| {
+            log::error!("Failed to parse IP address: {}", e);
+            ContainerdError::CreateContainerError(e.to_string())
+        })?;
 
-        if ips.is_empty() {
-            // TODO drop resources allocated
-            log::error!("No valid IP address found in CNI network: {}", raw_ip);
-            return Err(ContainerdError::CreateContainerError(format!(
-                "No valid IP address found in CNI network: {}",
-                raw_ip
-            )));
-        }
-
-        log::info!("CNI network created with IP: {:?}", ips);
+        log::info!("CNI network created with IP: {:?}", ipcidr);
         Ok(Self {
             cid: cid.to_string(),
             ns: ns.to_string(),
-            raw_ip,
-            ips,
+            ipcidr,
         })
     }
 
@@ -54,7 +35,7 @@ impl CNIEndpoint {
     }
 
     pub fn address(&self) -> IpAddr {
-        self.ips[0]
+        self.ipcidr.address()
     }
 }
 
@@ -62,5 +43,16 @@ impl Drop for CNIEndpoint {
     fn drop(&mut self) {
         log::info!("Dropping CNIEndpoint");
         self.delete();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    #[test]
+    fn test_ip_parsing() {
+        let raw_ip = "10.42.0.48/16";
+        let ipcidr = raw_ip.parse::<cidr::IpInet>().unwrap();
+        assert_eq!(ipcidr.address(), std::net::IpAddr::V4(std::net::Ipv4Addr::new(10, 42, 0, 48)));
     }
 }
