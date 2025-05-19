@@ -4,6 +4,7 @@ use tokio::signal::unix::{SignalKind, signal};
 async fn main() -> std::io::Result<()> {
     dotenv::dotenv().ok();
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
+    faas_containerd::init_backend().await;
     let provider = faas_containerd::provider::ContainerdProvider::new();
     let handle = provider.clone();
 

@@ -6,14 +6,19 @@ use actix_web::{
 
 use std::{collections::HashMap, sync::Arc};
 
-use crate::{handlers, metrics::HttpMetrics, provider::Provider, types::config::FaaSConfig};
+use crate::{
+    handlers,
+    // metrics::HttpMetrics,
+    provider::Provider,
+    types::config::FaaSConfig,
+};
 
 pub fn config_app<P: Provider>(provider: Arc<P>) -> impl FnOnce(&mut ServiceConfig) {
     // let _registry = Registry::new();
 
     let provider = web::Data::from(provider);
     let app_state = web::Data::new(AppState {
-        metrics: HttpMetrics::new(),
+        // metrics: HttpMetrics::new(),
         credentials: None,
     });
     move |cfg: &mut ServiceConfig| {
@@ -65,7 +70,7 @@ pub fn config_app<P: Provider>(provider: Arc<P>) -> impl FnOnce(&mut ServiceConf
 #[allow(dead_code)]
 struct AppState {
     // config: FaaSConfig,   //应用程序的配置，用于识别是否开启Basic Auth等
-    metrics: HttpMetrics, //用于监视http请求的持续时间和总数
+    // metrics: HttpMetrics, //用于监视http请求的持续时间和总数
     credentials: Option<HashMap<String, String>>, //当有认证信息的时候，获取认证信息
 }
 

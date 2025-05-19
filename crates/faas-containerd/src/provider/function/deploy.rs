@@ -1,4 +1,4 @@
-use crate::impls::{self, BACKEND, function::ContainerStaticMetadata};
+use crate::impls::{self, backend, function::ContainerStaticMetadata};
 use crate::provider::ContainerdProvider;
 use gateway::handlers::function::DeployError;
 use gateway::types::function::Deployment;
@@ -8,7 +8,7 @@ impl ContainerdProvider {
         let metadata = ContainerStaticMetadata::from(config);
 
         // not going to check the conflict of namespace, should be handled by containerd backend
-        BACKEND
+        backend()
             .prepare_image(&metadata.image, &metadata.namespace, true)
             .await
             .map_err(|img_err| {

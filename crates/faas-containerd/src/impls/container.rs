@@ -9,7 +9,7 @@ use crate::consts::DEFAULT_FUNCTION_NAMESPACE;
 
 use containerd_client::services::v1::container::Runtime;
 
-use super::{BACKEND, ContainerdService, function::ContainerStaticMetadata};
+use super::{ContainerdService, backend, function::ContainerStaticMetadata};
 use tonic::Request;
 
 #[derive(Debug)]
@@ -32,7 +32,7 @@ impl ContainerdService {
                 name: "io.containerd.runc.v2".to_string(),
                 options: None,
             }),
-            spec: Some(BACKEND.get_spec(metadata).await.map_err(|_| {
+            spec: Some(backend().get_spec(metadata).await.map_err(|_| {
                 log::error!("Failed to get spec");
                 ContainerError::Internal
             })?),
@@ -41,7 +41,7 @@ impl ContainerdService {
             ..Default::default()
         };
 
-        let mut cc = BACKEND.client.containers();
+        let mut cc = backend().client.containers();
         let req = containerd_client::services::v1::CreateContainerRequest {
             container: Some(container),
         };

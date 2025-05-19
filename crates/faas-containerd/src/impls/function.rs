@@ -2,7 +2,7 @@ use std::net::IpAddr;
 
 use gateway::types::function;
 
-use crate::{consts, impls::BACKEND};
+use crate::{consts, impls::backend};
 
 use super::{cni::CNIEndpoint, error::ContainerdError};
 
@@ -52,9 +52,9 @@ pub struct FunctionInstance {
 
 impl FunctionInstance {
     pub async fn new(metadata: ContainerStaticMetadata) -> Result<Self, ContainerdError> {
-        BACKEND.prepare_snapshot(&metadata).await?;
+        backend().prepare_snapshot(&metadata).await?;
 
-        let container = BACKEND.create_container(&metadata).await.map_err(|e| {
+        let container = backend().create_container(&metadata).await.map_err(|e| {
             log::error!("Failed to create container: {:?}", e);
             ContainerdError::CreateContainerError(String::new())
         })?;
@@ -64,7 +64,7 @@ impl FunctionInstance {
         // TODO: Use ostree-ext
         // let img_conf = BACKEND.get_runtime_config(&metadata.image).unwrap();
 
-        BACKEND
+        backend()
             .new_task(&metadata.container_id, &metadata.namespace)
             .await?;
 
@@ -80,11 +80,11 @@ impl FunctionInstance {
         let container_id = self.container.id.clone();
         let namespace = self.namespace.clone();
 
-        BACKEND
+        backend()
             .kill_task_with_timeout(&container_id, &namespace)
             .await?;
 
-        BACKEND
+        backend()
             .delete_container(&container_id, &namespace)
             .await
             .map_err(|e| {

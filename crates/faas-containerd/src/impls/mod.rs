@@ -7,43 +7,23 @@ pub mod snapshot;
 pub mod spec;
 pub mod task;
 
-use std::sync::LazyLock;
+use std::sync::OnceLock;
 
-pub static BACKEND: LazyLock<ContainerdService> = LazyLock::new(ContainerdService::new);
+pub static __BACKEND: OnceLock<ContainerdService> = OnceLock::new();
+
+pub(crate) fn backend() -> &'static ContainerdService {
+    __BACKEND.get().unwrap()
+}
+
+/// TODO: Panic on failure, should be handled in a better way
+pub async fn init_backend() {
+    let socket = std::env::var("SOCK_PATH").unwrap_or(DEFAULT_CTRD_SOCK.to_string());
+    let client = containerd_client::Client::from_path(socket).await.unwrap();
+    __BACKEND.set(ContainerdService { client }).ok().unwrap();
+}
 
 const DEFAULT_CTRD_SOCK: &str = "/run/containerd/containerd.sock";
 
-#[derive(Clone)]
 pub struct ContainerdService {
-    pub client: std::sync::Arc<containerd_client::Client>,
-}
-
-impl Default for ContainerdService {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl ContainerdService {
-    pub fn new() -> Self {
-        let fetch_client = async {
-            containerd_client::Client::from_path(
-                std::env::var("SOCKET_PATH").unwrap_or(String::from(DEFAULT_CTRD_SOCK)),
-            )
-            .await
-            .expect("Failed to create containerd client")
-        };
-        let client = if let Ok(handle) = tokio::runtime::Handle::try_current() {
-            // We're already in a runtime, use the current one
-            tokio::task::block_in_place(|| handle.block_on(fetch_client))
-        } else {
-            // We're not in a runtime, create a new one
-            tokio::runtime::Runtime::new()
-                .unwrap()
-                .block_on(fetch_client)
-        };
-        ContainerdService {
-            client: std::sync::Arc::new(client),
-        }
-    }
+    pub client: containerd_client::Client,
 }
