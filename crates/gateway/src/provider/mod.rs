@@ -1,5 +1,5 @@
 use crate::{
-    handlers::function::{DeleteError, DeployError, ResolveError},
+    handlers::function::{DeleteError, DeployError, ListError, ResolveError, UpdateError},
     types::function::{Deployment, Query, Status},
 };
 
@@ -13,7 +13,10 @@ pub trait Provider: Send + Sync + 'static {
     // `/system/functions` endpoint
 
     /// Get a list of deployed functions
-    fn list(&self) -> impl std::future::Future<Output = Vec<Status>> + Send;
+    fn list(
+        &self,
+        namespace: String,
+    ) -> impl std::future::Future<Output = Result<Vec<Status>, ListError>> + Send;
 
     /// Deploy a new function
     fn deploy(
@@ -25,7 +28,7 @@ pub trait Provider: Send + Sync + 'static {
     fn update(
         &self,
         param: Deployment,
-    ) -> impl std::future::Future<Output = Result<(), DeployError>> + Send;
+    ) -> impl std::future::Future<Output = Result<(), UpdateError>> + Send;
 
     /// Delete a function
     fn delete(

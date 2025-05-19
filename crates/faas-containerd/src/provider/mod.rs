@@ -3,7 +3,7 @@ pub mod function;
 use std::{collections::HashMap, sync::Arc};
 
 use gateway::{
-    handlers::function::{DeleteError, DeployError, ResolveError},
+    handlers::function::{DeleteError, DeployError, ListError, ResolveError, UpdateError},
     provider::Provider,
     types::function::{Deployment, Query, Status},
 };
@@ -35,15 +35,15 @@ impl Provider for ContainerdProvider {
         self._delete(function).await
     }
 
-    async fn list(&self) -> Vec<Status> {
-        unimplemented!()
+    async fn list(&self, namespace: String) -> Result<Vec<Status>, ListError> {
+        self._list(namespace).await
     }
 
-    async fn update(&self, _param: Deployment) -> Result<(), DeployError> {
-        unimplemented!()
+    async fn update(&self, param: Deployment) -> Result<(), UpdateError> {
+        self._update(param).await
     }
 
     async fn status(&self, _function: Query) -> Result<Status, ResolveError> {
-        unimplemented!()
+        self._status(_function).await
     }
 }
