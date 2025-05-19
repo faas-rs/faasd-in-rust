@@ -902,6 +902,7 @@ dependencies = [
 name = "faas-containerd"
 version = "0.1.0"
 dependencies = [
+ "actix-web",
  "chrono",
  "cni",
  "container_image_dist_ref",

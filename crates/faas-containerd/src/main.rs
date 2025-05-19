@@ -1,15 +1,10 @@
-pub mod consts;
-pub mod impls;
-pub mod provider;
-pub mod systemd;
-
 use tokio::signal::unix::{SignalKind, signal};
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
     dotenv::dotenv().ok();
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
-    let provider = provider::ContainerdProvider::new();
+    let provider = faas_containerd::provider::ContainerdProvider::new();
     let handle = provider.clone();
 
     tokio::spawn(async move {

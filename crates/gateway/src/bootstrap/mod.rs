@@ -1,13 +1,70 @@
-use actix_web::{App, HttpServer, dev::Server, middleware, web};
+use actix_web::{
+    App, HttpServer,
+    dev::Server,
+    web::{self, ServiceConfig},
+};
+
 use std::{collections::HashMap, sync::Arc};
 
 use crate::{handlers, metrics::HttpMetrics, provider::Provider, types::config::FaaSConfig};
+
+pub fn config_app<P: Provider>(provider: Arc<P>) -> impl FnOnce(&mut ServiceConfig) {
+    // let _registry = Registry::new();
+
+    let provider = web::Data::from(provider);
+    let app_state = web::Data::new(AppState {
+        metrics: HttpMetrics::new(),
+        credentials: None,
+    });
+    move |cfg: &mut ServiceConfig| {
+        cfg.app_data(app_state).app_data(provider).service(
+            web::scope("/system")
+                .service(
+                    web::resource("/functions")
+                        .route(web::get().to(handlers::function::list::<P>))
+                        .route(web::put().to(handlers::function::update::<P>))
+                        .route(web::post().to(handlers::function::deploy::<P>))
+                        .route(web::delete().to(handlers::function::delete::<P>)), // .route(web::put().to(handlers::update_function)),
+                )
+                .service(
+                    web::resource("/function/{functionName}")
+                        .route(web::get().to(handlers::function::status::<P>)),
+                )
+                //         .service(
+                //             web::resource("/scale-function/{name}")
+                //                 .route(web::post().to(handlers::scale_function)),
+                //         )
+                //         .service(web::resource("/info").route(web::get().to(handlers::info)))
+                //         .service(
+                //             web::resource("/secrets")
+                //                 .route(web::get().to(handlers::secrets))
+                //                 .route(web::post().to(handlers::secrets))
+                //                 .route(web::put().to(handlers::secrets))
+                //                 .route(web::delete().to(handlers::secrets)),
+                //         )
+                //         .service(web::resource("/logs").route(web::get().to(handlers::logs)))
+                //         .service(
+                //             web::resource("/namespaces")
+                //                 .route(web::get().to(handlers::list_namespaces))
+                //                 .route(web::post().to(handlers::mutate_namespace)),
+                //         ),
+                // )
+                .service(
+                    web::scope("/function").service(
+                        web::resource("/{name}").route(web::to(handlers::proxy::proxy::<P>)),
+                    ),
+                ),
+        );
+        // .route("/metrics", web::get().to(handlers::telemetry))
+        // .route("/healthz", web::get().to(handlers::health));
+    }
+}
 
 //应用程序状态，存储共享的数据，如配置、指标、认证信息等，为业务函数提供支持
 #[derive(Clone)]
 #[allow(dead_code)]
 struct AppState {
-    config: FaaSConfig,   //应用程序的配置，用于识别是否开启Basic Auth等
+    // config: FaaSConfig,   //应用程序的配置，用于识别是否开启Basic Auth等
     metrics: HttpMetrics, //用于监视http请求的持续时间和总数
     credentials: Option<HashMap<String, String>>, //当有认证信息的时候，获取认证信息
 }
@@ -16,72 +73,14 @@ struct AppState {
 pub fn serve<P: Provider>(provider: Arc<P>) -> std::io::Result<Server> {
     log::info!("Checking config file");
     let config = FaaSConfig::new();
-    // let _registry = Registry::new();
-    let metrics = HttpMetrics::new();
-
     let port = config.tcp_port.unwrap_or(8080);
-
-    // 用于存储应用程序状态的结构体
-    let app_state = web::Data::new(AppState {
-        config,
-        metrics,
-        credentials: None,
-    });
-
-    let provider = web::Data::from(provider);
 
     // 如果启用了Basic Auth，从指定路径读取认证凭证并存储在应用程序状态中
     // TODO: Authentication Logic
 
-    let server = HttpServer::new(move || {
-        App::new()
-            .app_data(app_state.clone())
-            .app_data(provider.clone())
-            .wrap(middleware::Logger::default())
-            .service(
-                web::scope("/system")
-                    .service(
-                        web::resource("/functions")
-                            .route(web::get().to(handlers::function::list::<P>))
-                            .route(web::put().to(handlers::function::update::<P>))
-                            .route(web::post().to(handlers::function::deploy::<P>))
-                            .route(web::delete().to(handlers::function::delete::<P>)), // .route(web::put().to(handlers::update_function)),
-                    )
-                    .service(
-                        web::resource("/function/{functionName}")
-                            .route(web::get().to(handlers::function::status::<P>)),
-                    )
-                    //         .service(
-                    //             web::resource("/scale-function/{name}")
-                    //                 .route(web::post().to(handlers::scale_function)),
-                    //         )
-                    //         .service(web::resource("/info").route(web::get().to(handlers::info)))
-                    //         .service(
-                    //             web::resource("/secrets")
-                    //                 .route(web::get().to(handlers::secrets))
-                    //                 .route(web::post().to(handlers::secrets))
-                    //                 .route(web::put().to(handlers::secrets))
-                    //                 .route(web::delete().to(handlers::secrets)),
-                    //         )
-                    //         .service(web::resource("/logs").route(web::get().to(handlers::logs)))
-                    //         .service(
-                    //             web::resource("/namespaces")
-                    //                 .route(web::get().to(handlers::list_namespaces))
-                    //                 .route(web::post().to(handlers::mutate_namespace)),
-                    //         ),
-                    // )
-                    .service(web::scope("/function").service(
-                        web::resource("/{name}").route(web::to(handlers::proxy::proxy::<P>)),
-                    )),
-            )
-        // .route("/metrics", web::get().to(handlers::telemetry))
-        // .route("/healthz", web::get().to(handlers::health))
-    })
-    .bind(("0.0.0.0", port))?
-    .run();
+    let server = HttpServer::new(move || App::new().configure(config_app(provider.clone())))
+        .bind(("0.0.0.0", port))?
+        .run();
 
     Ok(server)
 }
-
-//当上下文完成的时候关闭服务器
-//无法关闭时候写进log,并且返回错误
