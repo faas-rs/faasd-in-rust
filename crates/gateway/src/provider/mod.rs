@@ -8,7 +8,7 @@ pub trait Provider: Send + Sync + 'static {
     fn resolve(
         &self,
         function: Query,
-    ) -> impl std::future::Future<Output = Result<actix_http::Uri, ResolveError>> + Send;
+    ) -> impl std::future::Future<Output = Result<actix_http::uri::Builder, ResolveError>> + Send;
 
     // `/system/functions` endpoint
 

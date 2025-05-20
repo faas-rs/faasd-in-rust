@@ -3,24 +3,15 @@ use actix_web::{
     dev::Server,
     web::{self, ServiceConfig},
 };
-use serde::Deserialize;
 
 use std::{collections::HashMap, sync::Arc};
 
 use crate::{
-    handlers,
+    handlers::{self, proxy::PROXY_DISPATCH_PATH},
     // metrics::HttpMetrics,
     provider::Provider,
     types::config::FaaSConfig,
 };
-
-#[derive(Deserialize, Debug)]
-pub struct FunctionPathParams {
-    pub service_and_optional_namespace: String,
-    pub rest_path: String,
-}
-
-const PROXY_PATH: &str = "/{service_and_optional_namespace:[^{}/]+}{rest_path:/?.*}";
 
 pub fn config_app<P: Provider>(provider: Arc<P>) -> impl FnOnce(&mut ServiceConfig) {
     // let _registry = Registry::new();
@@ -65,10 +56,9 @@ pub fn config_app<P: Provider>(provider: Arc<P>) -> impl FnOnce(&mut ServiceConf
                        //         ),
                        // )
             )
-            .service(
-                web::scope("/function")
-                    .service(web::resource(PROXY_PATH).route(web::to(handlers::proxy::proxy::<P>))),
-            );
+            .service(web::scope("/function").service(
+                web::resource(PROXY_DISPATCH_PATH).route(web::to(handlers::proxy::proxy::<P>)),
+            ));
         // .route("/metrics", web::get().to(handlers::telemetry))
         // .route("/healthz", web::get().to(handlers::health));
     }
@@ -102,57 +92,84 @@ pub fn serve<P: Provider>(provider: Arc<P>) -> std::io::Result<Server> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::str::FromStr;
+
+    use crate::handlers::proxy::{PROXY_DISPATCH_PATH, ProxyQuery};
+
     use actix_web::{App, HttpResponse, Responder, test, web};
 
-    async fn fake_handler(dispatch: web::Path<FunctionPathParams>) -> impl Responder {
-        let combine_name = &dispatch.service_and_optional_namespace;
-        let path = &dispatch.rest_path;
-        HttpResponse::Ok().body(format!("{}|{}", combine_name, path)) // path 是 "/path"
+    async fn dispatcher(any: web::Path<String>) -> impl Responder {
+        let meta = ProxyQuery::from_str(&any).unwrap();
+        HttpResponse::Ok().body(format!(
+            "{}|{}|{}",
+            meta.query.service,
+            meta.query.namespace.unwrap_or_default(),
+            meta.path
+        ))
     }
 
     #[actix_web::test]
-    async fn test_proxy_dispatch() {
-        let app = test::init_service(App::new().route(PROXY_PATH, web::to(fake_handler))).await;
+    async fn test_proxy() {
+        let app = test::init_service(
+            App::new().service(web::resource(PROXY_DISPATCH_PATH).route(web::get().to(dispatcher))),
+        )
+        .await;
 
-        // name
+        let (unslash, slash, resp0, a0) = (
+            "/service.namespace/path",
+            "/service.namespace/path/",
+            "service|namespace|/path",
+            "service|namespace|/path/",
+        );
+        let (unslash1, slash1, resp1, a1) = (
+            "/service/path",
+            "/service/path/",
+            "service||/path",
+            "service||/path/",
+        );
+        let (unslash2, slash2, resp2, a2) = (
+            "/service.namespace",
+            "/service.namespace/",
+            "service|namespace|",
+            "service|namespace|/",
+        );
+        let (unslash3, slash3, resp3, a3) = ("/service", "/service/", "service||", "service||/");
 
-        let req = test::TestRequest::get().uri("/name").to_request();
+        let req = test::TestRequest::get().uri(unslash).to_request();
+        let resp = test::call_and_read_body(&app, req).await;
+        assert_eq!(resp, resp0);
+
+        let req = test::TestRequest::get().uri(slash).to_request();
+        let resp = test::call_and_read_body(&app, req).await;
+        assert_eq!(resp, a0);
+
+        let req = test::TestRequest::get().uri(unslash1).to_request();
+        let resp = test::call_and_read_body(&app, req).await;
+        assert_eq!(resp, resp1);
+
+        let req = test::TestRequest::get().uri(slash1).to_request();
+        let resp = test::call_and_read_body(&app, req).await;
+        assert_eq!(resp, a1);
+
+        let req = test::TestRequest::get().uri(unslash2).to_request();
+        let resp = test::call_and_read_body(&app, req).await;
+        assert_eq!(resp, resp2);
+
+        let req = test::TestRequest::get().uri(slash2).to_request();
+        let resp = test::call_and_read_body(&app, req).await;
+        assert_eq!(resp, a2);
+
+        let req = test::TestRequest::get().uri(unslash3).to_request();
+        let resp = test::call_and_read_body(&app, req).await;
+        assert_eq!(resp, resp3);
+
+        let req = test::TestRequest::get().uri(slash3).to_request();
+        let resp = test::call_and_read_body(&app, req).await;
+        assert_eq!(resp, a3);
+
+        // test with empty path
+        let req = test::TestRequest::get().uri("/").to_request();
         let resp = test::call_service(&app, req).await;
-        let body = test::read_body(resp).await;
-        assert_eq!(body, "name|");
-
-        let req = test::TestRequest::get().uri("/name/path").to_request();
-        let resp = test::call_service(&app, req).await;
-        let body = test::read_body(resp).await;
-        assert_eq!(body, "name|/path");
-
-        let req = test::TestRequest::get()
-            .uri("/name/path1/path2")
-            .to_request();
-        let resp = test::call_service(&app, req).await;
-        let body = test::read_body(resp).await;
-        assert_eq!(body, "name|/path1/path2");
-
-        // name.namespace
-
-        let req = test::TestRequest::get().uri("/name.namespace").to_request();
-        let resp = test::call_service(&app, req).await;
-        let body = test::read_body(resp).await;
-        assert_eq!(body, "name.namespace|");
-
-        let req = test::TestRequest::get()
-            .uri("/name.namespace/path")
-            .to_request();
-        let resp = test::call_service(&app, req).await;
-        let body = test::read_body(resp).await;
-        assert_eq!(body, "name.namespace|/path");
-
-        let req = test::TestRequest::get()
-            .uri("/name.namespace/path1/path2")
-            .to_request();
-        let resp = test::call_service(&app, req).await;
-        let body = test::read_body(resp).await;
-        assert_eq!(body, "name.namespace|/path1/path2");
+        assert_eq!(resp.status(), 404);
     }
 }
