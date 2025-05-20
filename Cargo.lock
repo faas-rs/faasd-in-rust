@@ -793,6 +793,7 @@ dependencies = [
 name = "faas-containerd"
 version = "0.1.0"
 dependencies = [
+ "actix-http",
  "actix-web",
  "chrono",
  "cidr",
@@ -956,12 +957,14 @@ dependencies = [
 name = "gateway"
 version = "0.1.0"
 dependencies = [
+ "actix-http",
  "actix-web",
  "actix-web-httpauth",
  "awc",
  "base64 0.13.1",
  "chrono",
  "derive_more",
+ "http 0.2.12",
  "log",
  "my-workspace-hack",
  "prometheus",

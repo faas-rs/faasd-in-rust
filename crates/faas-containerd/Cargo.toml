@@ -27,6 +27,7 @@ dotenv = "0.15.0"
 derive_more = { version = "2", features = ["full"] }
 cidr = "0.3.1"
 defer = "*"
+actix-http = "*"
 netns-rs = "0.1.0"
 
 [dev-dependencies]

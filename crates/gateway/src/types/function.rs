@@ -1,6 +1,6 @@
 // https://github.com/openfaas/faas/blob/7803ea1861f2a22adcbcfa8c79ed539bc6506d5b/api-docs/spec.openapi.yml
 
-use std::collections::HashMap;
+use std::{collections::HashMap, str::FromStr};
 
 use serde::{Deserialize, Serialize};
 
@@ -135,9 +135,11 @@ pub struct Query {
 }
 
 /// TODO: 其实应该是 try from, 排除非法的函数名
-impl From<&str> for Query {
-    fn from(function_name: &str) -> Self {
-        if let Some(index) = function_name.rfind('.') {
+impl FromStr for Query {
+    type Err = ();
+
+    fn from_str(function_name: &str) -> Result<Self, Self::Err> {
+        Ok(if let Some(index) = function_name.rfind('.') {
             Self {
                 service: function_name[..index].to_string(),
                 namespace: Some(function_name[index + 1..].to_string()),
@@ -147,7 +149,7 @@ impl From<&str> for Query {
                 service: function_name.to_string(),
                 namespace: Some("default".to_string()),
             }
-        }
+        })
     }
 }
 

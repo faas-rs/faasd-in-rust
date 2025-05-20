@@ -23,7 +23,7 @@ impl ContainerdProvider {
 }
 
 impl Provider for ContainerdProvider {
-    async fn resolve(&self, function: Query) -> Result<url::Url, ResolveError> {
+    async fn resolve(&self, function: Query) -> Result<actix_http::Uri, ResolveError> {
         self._resolve(function).await
     }
 
