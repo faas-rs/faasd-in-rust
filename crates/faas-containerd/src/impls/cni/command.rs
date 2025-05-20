@@ -1,14 +1,13 @@
 use std::{
     io::Error,
     process::{Command, Output},
+    sync::LazyLock,
 };
 
-lazy_static::lazy_static! {
-    static ref CNI_BIN_DIR: String =
-        std::env::var("CNI_BIN_DIR").expect("Environment variable CNI_BIN_DIR is not set");
-    static ref CNI_TOOL: String =
-        std::env::var("CNI_TOOL").expect("Environment variable CNI_TOOL is not set");
-}
+static CNI_BIN_DIR: LazyLock<String> =
+    LazyLock::new(|| std::env::var("CNI_BIN_DIR").unwrap_or_else(|_| "/opt/cni/bin".to_string()));
+static CNI_TOOL: LazyLock<String> =
+    LazyLock::new(|| std::env::var("CNI_TOOL").unwrap_or_else(|_| "cni-tool".to_string()));
 
 #[inline(always)]
 fn netns_path(netns: &str) -> String {
@@ -36,7 +35,7 @@ pub(super) fn cni_del_bridge(netns: &str, bridge_network_name: &str) -> Result<O
 /// THESE TESTS SHOULD BE RUN WITH ROOT PRIVILEGES
 #[cfg(test)]
 mod test {
-    use crate::{netns, util};
+    use crate::impls::cni::{netns, util};
     use std::path::Path;
 
     use super::*;
@@ -49,7 +48,7 @@ mod test {
     const CNI_CONF_DIR: &str = "/etc/cni/net.d";
 
     fn init_test_net_fs() {
-        crate::util::init_net_fs(
+        util::init_net_fs(
             Path::new(CNI_CONF_DIR),
             TEST_CNI_CONF_FILENAME,
             TEST_NETWORK_NAME,

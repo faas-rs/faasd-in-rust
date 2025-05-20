@@ -61,7 +61,6 @@
             ./Cargo.lock
             (craneLib.fileset.commonCargoSources ./crates/faas-containerd)
             (craneLib.fileset.commonCargoSources ./crates/gateway)
-            (craneLib.fileset.commonCargoSources ./crates/cni)
             (craneLib.fileset.commonCargoSources ./crates/my-workspace-hack)
             (craneLib.fileset.commonCargoSources crate)
           ];

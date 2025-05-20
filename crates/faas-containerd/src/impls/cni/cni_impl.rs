@@ -1,27 +1,21 @@
 type Err = Box<dyn std::error::Error>;
 
-use lazy_static::lazy_static;
 use serde_json::Value;
-use std::{fmt::Error, net::IpAddr, path::Path};
+use std::{fmt::Error, net::IpAddr, path::Path, sync::LazyLock};
 
-mod command;
-mod netns;
-mod util;
-use command as cmd;
+use super::{command as cmd, netns, util};
 
-lazy_static! {
-    static ref CNI_CONF_DIR: String =
-        std::env::var("CNI_CONF_DIR").expect("Environment variable CNI_CONF_DIR is not set");
-}
+static CNI_CONF_DIR: LazyLock<String> = LazyLock::new(|| {
+    std::env::var("CNI_CONF_DIR").unwrap_or_else(|_| "/etc/cni/net.d".to_string())
+});
 
 const CNI_DATA_DIR: &str = "/var/run/cni";
 const DEFAULT_CNI_CONF_FILENAME: &str = "10-faasrs.conflist";
 const DEFAULT_NETWORK_NAME: &str = "faasrs-cni-bridge";
 const DEFAULT_BRIDGE_NAME: &str = "faasrs0";
 const DEFAULT_SUBNET: &str = "10.66.0.0/16";
-// const DEFAULT_IF_PREFIX: &str = "eth";
 
-pub fn init_net_work() -> Result<(), Err> {
+pub fn init_cni_network() -> Result<(), Err> {
     util::init_net_fs(
         Path::new(CNI_CONF_DIR.as_str()),
         DEFAULT_CNI_CONF_FILENAME,
@@ -50,6 +44,7 @@ pub fn create_cni_network(cid: &str, ns: &str) -> Result<String, Err> {
             let json: Value = match serde_json::from_str(&stdout) {
                 Ok(json) => json,
                 Err(e) => {
+                    log::error!("Failed to parse JSON: {}", e);
                     return Err(Box::new(e));
                 }
             };
@@ -64,6 +59,7 @@ pub fn create_cni_network(cid: &str, ns: &str) -> Result<String, Err> {
             }
         }
         Err(e) => {
+            log::error!("Failed to add CNI bridge: {}", e);
             return Err(Box::new(e));
         }
     }

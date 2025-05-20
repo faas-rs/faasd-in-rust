@@ -14,7 +14,6 @@ thiserror = "1.0"
 awc = "3.6.0"
 prometheus = "0.13"
 base64 = "0.13"
-cni = { path = "../cni" }
 log = "0.4.27"
 my-workspace-hack = { version = "0.1", path = "../my-workspace-hack" }
 url = "2.4"

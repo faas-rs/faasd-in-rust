@@ -20,6 +20,7 @@ pub async fn init_backend() {
     let socket = std::env::var("SOCK_PATH").unwrap_or(crate::consts::DEFAULT_CTRD_SOCK.to_string());
     let client = containerd_client::Client::from_path(socket).await.unwrap();
     __BACKEND.set(ContainerdService { client }).ok().unwrap();
+    cni::init_cni_network().unwrap();
 }
 
 pub struct ContainerdService {
