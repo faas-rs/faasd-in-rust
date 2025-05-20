@@ -43,7 +43,7 @@ impl Provider for ContainerdProvider {
         self._update(param).await
     }
 
-    async fn status(&self, _function: Query) -> Result<Status, ResolveError> {
-        self._status(_function).await
+    async fn status(&self, function: Query) -> Result<Status, ResolveError> {
+        self._status(function).await
     }
 }

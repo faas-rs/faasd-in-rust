@@ -119,7 +119,7 @@ pub enum UpdateError {
     Invalid(String),
     #[display("Internal: {}", _0)]
     Internal(String),
-    #[display("NotFound:{}", _0)]
+    #[display("NotFound: {}", _0)]
     NotFound(String),
 }
 
