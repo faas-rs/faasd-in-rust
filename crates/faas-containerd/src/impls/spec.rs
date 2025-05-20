@@ -5,7 +5,8 @@ use oci_spec::{
     runtime::{
         Capability, LinuxBuilder, LinuxCapabilitiesBuilder, LinuxDeviceCgroupBuilder,
         LinuxNamespaceBuilder, LinuxNamespaceType, LinuxResourcesBuilder, MountBuilder,
-        PosixRlimitBuilder, PosixRlimitType, ProcessBuilder, RootBuilder, SpecBuilder, UserBuilder,
+        PosixRlimitBuilder, PosixRlimitType, ProcessBuilder, RootBuilder, Spec, SpecBuilder,
+        UserBuilder,
     },
 };
 use std::path::Path;
@@ -220,6 +221,40 @@ pub(super) fn generate_default_unix_spec(
         })?;
 
     Ok(spec)
+}
+
+#[allow(unused)]
+pub(super) fn with_vm_network(spec: &mut Spec) -> Result<(), ContainerdError> {
+    let mounts = spec
+        .mounts()
+        .as_ref()
+        .expect("Spec's 'Mounts' field should not be None");
+    let mut new_mounts = mounts.clone();
+    new_mounts.extend([
+        MountBuilder::default()
+            .destination("/etc/resolv.conf")
+            .typ("bind")
+            .source("/etc/resolv.conf")
+            .options(["rbind".into(), "ro".into()])
+            .build()
+            .map_err(|e| {
+                log::error!("Failed to build OCI (resolv.conf) Mount: {}", e);
+                ContainerdError::GenerateSpecError(e.to_string())
+            })?,
+        MountBuilder::default()
+            .destination("/etc/hosts")
+            .typ("bind")
+            .source("/etc/hosts")
+            .options(["rbind".into(), "ro".into()])
+            .build()
+            .map_err(|e| {
+                log::error!("Failed to build OCI (hosts) Mount: {}", e);
+                ContainerdError::GenerateSpecError(e.to_string())
+            })?,
+    ]);
+    let _ = spec.set_mounts(Some(new_mounts));
+
+    Ok(())
 }
 
 #[derive(Debug, Clone)]
