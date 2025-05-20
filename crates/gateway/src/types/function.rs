@@ -145,7 +145,7 @@ impl From<&str> for Query {
         } else {
             Self {
                 service: function_name.to_string(),
-                namespace: None,
+                namespace: Some("default".to_string()),
             }
         }
     }

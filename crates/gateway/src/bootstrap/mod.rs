@@ -13,9 +13,6 @@ use crate::{
     types::config::FaaSConfig,
 };
 
-const PROXY_PATH: &str =
-    "/function/{service_and_optional_namespace:[^{}/]+(?:\\.[^{}/]+)?}{rest_path:/?.*}";
-
 pub fn config_app<P: Provider>(provider: Arc<P>) -> impl FnOnce(&mut ServiceConfig) {
     // let _registry = Registry::new();
 
@@ -60,8 +57,12 @@ pub fn config_app<P: Provider>(provider: Arc<P>) -> impl FnOnce(&mut ServiceConf
                        // )
             )
             .service(
-                web::scope("/function")
-                    .service(web::resource(PROXY_PATH).route(web::to(handlers::proxy::proxy::<P>))),
+                web::scope("/function").service(
+                    web::resource(
+                        "/{service_and_optional_namespace:[^{}/]+(?:\\.[^{}/]+)?}{rest_path:/?.*}",
+                    )
+                    .route(web::to(handlers::proxy::proxy::<P>)),
+                ),
             );
         // .route("/metrics", web::get().to(handlers::telemetry))
         // .route("/healthz", web::get().to(handlers::health));
@@ -95,7 +96,8 @@ pub fn serve<P: Provider>(provider: Arc<P>) -> std::io::Result<Server> {
 }
 #[cfg(test)]
 mod tests {
-    use super::PROXY_PATH;
+    const PROXY_PATH: &str =
+        "/function/{service_and_optional_namespace:[^{}/]+(?:\\.[^{}/]+)?}{rest_path:/?.*}";
     use actix_web::{App, HttpResponse, Responder, test, web};
     use serde::Deserialize;
     #[derive(Deserialize, Debug)]
