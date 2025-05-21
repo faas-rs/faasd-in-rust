@@ -56,13 +56,7 @@ impl ContainerdProvider {
         // TODO: Use ostree-ext
         // let img_conf = BACKEND.get().unwrap().get_runtime_config(&metadata.image).unwrap();
 
-        backend()
-            .new_task(mounts, &metadata.endpoint)
-            .await
-            .map_err(|e| {
-                log::error!("Failed to create task: {:?}", e);
-                DeployError::InternalError(e.to_string())
-            })?;
+        backend().new_task(mounts, &metadata.endpoint).await?;
 
         let task_defer = scopeguard::guard((), |()| {
             let endpoint = metadata.endpoint.clone();

@@ -1,5 +1,6 @@
 use crate::provider::Provider;
 use crate::types::function::{Delete, Deployment, Query};
+use actix_http::StatusCode;
 use actix_web::ResponseError;
 use actix_web::{HttpResponse, web};
 use derive_more::derive::Display;
@@ -124,49 +125,49 @@ pub enum UpdateError {
 }
 
 impl ResponseError for DeployError {
-    fn status_code(&self) -> awc::http::StatusCode {
+    fn status_code(&self) -> StatusCode {
         match self {
-            DeployError::Invalid(_) => awc::http::StatusCode::BAD_REQUEST,
-            DeployError::InternalError(_) => awc::http::StatusCode::INTERNAL_SERVER_ERROR,
+            DeployError::Invalid(_) => StatusCode::BAD_REQUEST,
+            DeployError::InternalError(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 }
 
 impl ResponseError for DeleteError {
-    fn status_code(&self) -> awc::http::StatusCode {
+    fn status_code(&self) -> StatusCode {
         match self {
-            DeleteError::Invalid(_) => awc::http::StatusCode::BAD_REQUEST,
-            DeleteError::NotFound(_) => awc::http::StatusCode::NOT_FOUND,
-            DeleteError::Internal(_) => awc::http::StatusCode::INTERNAL_SERVER_ERROR,
+            DeleteError::Invalid(_) => StatusCode::BAD_REQUEST,
+            DeleteError::NotFound(_) => StatusCode::NOT_FOUND,
+            DeleteError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 }
 
 impl ResponseError for ResolveError {
-    fn status_code(&self) -> awc::http::StatusCode {
+    fn status_code(&self) -> StatusCode {
         match self {
-            ResolveError::NotFound(_) => awc::http::StatusCode::NOT_FOUND,
-            ResolveError::Invalid(_) => awc::http::StatusCode::BAD_REQUEST,
-            ResolveError::Internal(_) => awc::http::StatusCode::INTERNAL_SERVER_ERROR,
+            ResolveError::NotFound(_) => StatusCode::NOT_FOUND,
+            ResolveError::Invalid(_) => StatusCode::BAD_REQUEST,
+            ResolveError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 }
 
 impl ResponseError for ListError {
-    fn status_code(&self) -> awc::http::StatusCode {
+    fn status_code(&self) -> StatusCode {
         match self {
-            ListError::Internal(_) => awc::http::StatusCode::INTERNAL_SERVER_ERROR,
-            ListError::NotFound(_) => awc::http::StatusCode::NOT_FOUND,
+            ListError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            ListError::NotFound(_) => StatusCode::NOT_FOUND,
         }
     }
 }
 
 impl ResponseError for UpdateError {
-    fn status_code(&self) -> awc::http::StatusCode {
+    fn status_code(&self) -> StatusCode {
         match self {
-            UpdateError::Invalid(_) => awc::http::StatusCode::BAD_REQUEST,
-            UpdateError::Internal(_) => awc::http::StatusCode::INTERNAL_SERVER_ERROR,
-            UpdateError::NotFound(_) => awc::http::StatusCode::NOT_FOUND,
+            UpdateError::Invalid(_) => StatusCode::BAD_REQUEST,
+            UpdateError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            UpdateError::NotFound(_) => StatusCode::NOT_FOUND,
         }
     }
 }

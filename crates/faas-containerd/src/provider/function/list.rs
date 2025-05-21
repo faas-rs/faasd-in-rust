@@ -1,7 +1,7 @@
 use gateway::{handlers::function::ListError, types::function::Status};
 
 use crate::{
-    impls::{backend, cni::Endpoint},
+    impls::{backend, cni::Endpoint, task::TaskError},
     provider::ContainerdProvider,
 };
 
@@ -31,6 +31,7 @@ impl ContainerdProvider {
                         replicas = 1;
                     }
                 }
+                Err(TaskError::NotFound) => continue,
                 Err(e) => {
                     log::warn!(
                         "failed to get task for function {:?} because {:?}",

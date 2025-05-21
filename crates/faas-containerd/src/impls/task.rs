@@ -2,25 +2,52 @@ use std::time::Duration;
 
 use containerd_client::{
     services::v1::{
-        CreateTaskRequest, DeleteTaskRequest, KillRequest, ListTasksRequest, ListTasksResponse,
-        StartRequest, WaitRequest, WaitResponse,
+        CreateTaskRequest, DeleteTaskRequest, GetRequest, KillRequest, ListTasksRequest,
+        ListTasksResponse, StartRequest, WaitRequest, WaitResponse,
     },
     types::{Mount, v1::Process},
     with_namespace,
 };
+use derive_more::Display;
+use gateway::handlers::function::DeployError;
 use tonic::Request;
-
-use crate::impls::error::ContainerdError;
 
 use super::{ContainerdService, cni::Endpoint};
 
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Display)]
+pub enum TaskError {
+    NotFound,
+    AlreadyExists,
+    InvalidArgument,
+    // PermissionDenied,
+    Internal(String),
+}
+
+impl From<tonic::Status> for TaskError {
+    fn from(status: tonic::Status) -> Self {
+        use tonic::Code::*;
+        match status.code() {
+            NotFound => TaskError::NotFound,
+            AlreadyExists => TaskError::AlreadyExists,
+            InvalidArgument => TaskError::InvalidArgument,
+            // PermissionDenied => TaskError::PermissionDenied,
+            _ => TaskError::Internal(status.message().to_string()),
+        }
+    }
+}
+
+impl From<TaskError> for DeployError {
+    fn from(e: TaskError) -> DeployError {
+        match e {
+            TaskError::InvalidArgument => DeployError::Invalid("Invalid argument".to_string()),
+            _ => DeployError::InternalError(format!("Internal error: {}", e.to_string())),
+        }
+    }
+}
+
 impl ContainerdService {
     /// 创建并启动任务
-    pub async fn new_task(
-        &self,
-        mounts: Vec<Mount>,
-        endpoint: &Endpoint,
-    ) -> Result<(), ContainerdError> {
+    pub async fn new_task(&self, mounts: Vec<Mount>, endpoint: &Endpoint) -> Result<(), TaskError> {
         let Endpoint {
             service: cid,
             namespace: ns,
@@ -31,7 +58,7 @@ impl ContainerdService {
         Ok(())
     }
 
-    async fn do_start_task(&self, cid: &str, ns: &str) -> Result<(), ContainerdError> {
+    async fn do_start_task(&self, cid: &str, ns: &str) -> Result<(), TaskError> {
         let mut c: containerd_client::services::v1::tasks_client::TasksClient<
             tonic::transport::Channel,
         > = self.client.tasks();
@@ -39,11 +66,9 @@ impl ContainerdService {
             container_id: cid.to_string(),
             ..Default::default()
         };
-        let _resp = c.start(with_namespace!(req, ns)).await.map_err(|e| {
-            log::error!("Failed to start task: {}", e);
-            ContainerdError::StartTaskError(e.to_string())
-        })?;
-        log::info!("Task: {:?} started", cid);
+        let resp = c.start(with_namespace!(req, ns)).await?;
+        log::debug!("Task: {:?} started", cid);
+        log::trace!("Task start response: {:?}", resp);
 
         Ok(())
     }
@@ -53,78 +78,48 @@ impl ContainerdService {
         cid: &str,
         ns: &str,
         rootfs: Vec<Mount>,
-    ) -> Result<(), ContainerdError> {
+    ) -> Result<(), TaskError> {
         let mut tc = self.client.tasks();
         let create_request = CreateTaskRequest {
             container_id: cid.to_string(),
             rootfs,
             ..Default::default()
         };
-        let _resp = tc
-            .create(with_namespace!(create_request, ns))
-            .await
-            .map_err(|e| {
-                log::error!("Failed to create task: {}", e);
-                ContainerdError::CreateTaskError(e.to_string())
-            })?;
+        let _resp = tc.create(with_namespace!(create_request, ns)).await?;
 
         Ok(())
     }
 
-    pub async fn get_task(&self, endpoint: &Endpoint) -> Result<Process, ContainerdError> {
+    pub async fn get_task(&self, endpoint: &Endpoint) -> Result<Process, TaskError> {
         let Endpoint {
             service: cid,
             namespace: ns,
         } = endpoint;
         let mut tc = self.client.tasks();
 
-        let request = ListTasksRequest {
-            filter: format!("container=={}", cid),
+        let req = GetRequest {
+            container_id: cid.clone(),
+            ..Default::default()
         };
 
-        let response = tc.list(with_namespace!(request, ns)).await.map_err(|e| {
-            log::error!("Failed to list tasks: {}", e);
-            ContainerdError::GetContainerListError(e.to_string())
-        })?;
-        let tasks = response.into_inner().tasks;
+        let resp = tc.get(with_namespace!(req, ns)).await?;
 
-        let task = tasks
-            .into_iter()
-            .map(|task| {
-                log::trace!("Task: {:?}", task);
-                task
-            })
-            .find(|task| task.id == *cid)
-            .ok_or_else(|| -> ContainerdError {
-                log::error!("Task not found for container: {}", cid);
-                ContainerdError::CreateTaskError("Task not found".to_string())
-            })?;
+        let task = resp.into_inner().process.ok_or(TaskError::NotFound)?;
 
         Ok(task)
     }
 
     #[allow(dead_code)]
-    async fn list_task_by_cid(
-        &self,
-        cid: &str,
-        ns: &str,
-    ) -> Result<ListTasksResponse, ContainerdError> {
+    async fn list_task_by_cid(&self, cid: &str, ns: &str) -> Result<ListTasksResponse, TaskError> {
         let mut c = self.client.tasks();
         let request = ListTasksRequest {
             filter: format!("container=={}", cid),
         };
-        let response = c
-            .list(with_namespace!(request, ns))
-            .await
-            .map_err(|e| {
-                log::error!("Failed to list tasks: {}", e);
-                ContainerdError::GetContainerListError(e.to_string())
-            })?
-            .into_inner();
+        let response = c.list(with_namespace!(request, ns)).await?.into_inner();
         Ok(response)
     }
 
-    async fn do_kill_task(&self, cid: &str, ns: &str) -> Result<(), ContainerdError> {
+    async fn do_kill_task(&self, cid: &str, ns: &str) -> Result<(), TaskError> {
         let mut c = self.client.tasks();
         let kill_request = KillRequest {
             container_id: cid.to_string(),
@@ -132,16 +127,11 @@ impl ContainerdService {
             all: true,
             ..Default::default()
         };
-        c.kill(with_namespace!(kill_request, ns))
-            .await
-            .map_err(|e| {
-                log::error!("Failed to kill task: {}", e);
-                ContainerdError::KillTaskError(e.to_string())
-            })?;
+        c.kill(with_namespace!(kill_request, ns)).await?;
         Ok(())
     }
 
-    async fn do_kill_task_force(&self, cid: &str, ns: &str) -> Result<(), ContainerdError> {
+    async fn do_kill_task_force(&self, cid: &str, ns: &str) -> Result<(), TaskError> {
         let mut c = self.client.tasks();
         let kill_request = KillRequest {
             container_id: cid.to_string(),
@@ -149,30 +139,20 @@ impl ContainerdService {
             all: true,
             ..Default::default()
         };
-        c.kill(with_namespace!(kill_request, ns))
-            .await
-            .map_err(|e| {
-                log::error!("Failed to force kill task: {}", e);
-                ContainerdError::KillTaskError(e.to_string())
-            })?;
+        c.kill(with_namespace!(kill_request, ns)).await?;
         Ok(())
     }
 
-    async fn do_delete_task(&self, cid: &str, ns: &str) -> Result<(), ContainerdError> {
+    async fn do_delete_task(&self, cid: &str, ns: &str) -> Result<(), TaskError> {
         let mut c = self.client.tasks();
         let delete_request = DeleteTaskRequest {
             container_id: cid.to_string(),
         };
-        c.delete(with_namespace!(delete_request, ns))
-            .await
-            .map_err(|e| {
-                log::error!("Failed to delete task: {}", e);
-                ContainerdError::DeleteTaskError(e.to_string())
-            })?;
+        c.delete(with_namespace!(delete_request, ns)).await?;
         Ok(())
     }
 
-    async fn do_wait_task(&self, cid: &str, ns: &str) -> Result<WaitResponse, ContainerdError> {
+    async fn do_wait_task(&self, cid: &str, ns: &str) -> Result<WaitResponse, TaskError> {
         let mut c = self.client.tasks();
         let wait_request = WaitRequest {
             container_id: cid.to_string(),
@@ -180,17 +160,13 @@ impl ContainerdService {
         };
         let resp = c
             .wait(with_namespace!(wait_request, ns))
-            .await
-            .map_err(|e| {
-                log::error!("wait error: {}", e);
-                ContainerdError::WaitTaskError(e.to_string())
-            })?
+            .await?
             .into_inner();
         Ok(resp)
     }
 
     /// 杀死并删除任务
-    pub async fn kill_task_with_timeout(&self, endpoint: &Endpoint) -> Result<(), ContainerdError> {
+    pub async fn kill_task_with_timeout(&self, endpoint: &Endpoint) -> Result<(), TaskError> {
         let Endpoint {
             service: cid,
             namespace: ns,
