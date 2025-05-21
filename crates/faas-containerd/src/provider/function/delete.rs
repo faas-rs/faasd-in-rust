@@ -7,14 +7,9 @@ use gateway::types::function::Query;
 impl ContainerdProvider {
     pub(crate) async fn _delete(&self, function: Query) -> Result<(), DeleteError> {
         let endpoint: Endpoint = function.into();
+        log::trace!("Deleting function: {:?}", endpoint);
 
-        let kill_err = backend()
-            .kill_task_with_timeout(&endpoint)
-            .await
-            .map_err(|e| {
-                log::error!("Failed to kill task: {:?}", e);
-                e
-            });
+        backend().kill_task_with_timeout(&endpoint).await?;
 
         let del_ctr_err = backend().delete_container(&endpoint).await.map_err(|e| {
             log::error!("Failed to delete container: {:?}", e);
@@ -28,12 +23,12 @@ impl ContainerdProvider {
 
         let del_net_err = cni::cni_impl::delete_cni_network(endpoint);
 
-        if kill_err.is_ok() && del_ctr_err.is_ok() && rm_snap_err.is_ok() {
+        if del_ctr_err.is_ok() && rm_snap_err.is_ok() && del_net_err.is_ok() {
             Ok(())
         } else {
             Err(DeleteError::Internal(format!(
-                "{:?}, {:?}, {:?}, {:?}",
-                kill_err, del_ctr_err, rm_snap_err, del_net_err
+                "{:?}, {:?}, {:?}",
+                del_ctr_err, rm_snap_err, del_net_err
             )))
         }
     }

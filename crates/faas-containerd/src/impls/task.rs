@@ -9,7 +9,7 @@ use containerd_client::{
     with_namespace,
 };
 use derive_more::Display;
-use gateway::handlers::function::DeployError;
+use gateway::handlers::function::{DeleteError, DeployError};
 use tonic::Request;
 
 use super::{ContainerdService, cni::Endpoint};
@@ -39,8 +39,19 @@ impl From<tonic::Status> for TaskError {
 impl From<TaskError> for DeployError {
     fn from(e: TaskError) -> DeployError {
         match e {
-            TaskError::InvalidArgument => DeployError::Invalid("Invalid argument".to_string()),
-            _ => DeployError::InternalError(format!("Internal error: {}", e.to_string())),
+            TaskError::InvalidArgument => DeployError::Invalid(e.to_string()),
+            _ => DeployError::InternalError(e.to_string()),
+        }
+    }
+}
+
+impl From<TaskError> for DeleteError {
+    fn from(e: TaskError) -> DeleteError {
+        log::trace!("DeleteTaskError: {:?}", e);
+        match e {
+            TaskError::NotFound => DeleteError::NotFound(e.to_string()),
+            TaskError::InvalidArgument => DeleteError::Invalid(e.to_string()),
+            _ => DeleteError::Internal(e.to_string()),
         }
     }
 }
@@ -182,6 +193,7 @@ impl ContainerdService {
             Ok(Err(e)) => {
                 // wait 报错
                 log::error!("Error while waiting for task {}: {:?}", cid, e);
+                return Err(e);
             }
             Err(_) => {
                 // 超时，强制 kill

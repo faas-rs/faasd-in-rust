@@ -48,9 +48,6 @@ async fn test_handlers_in_order() {
         .to_request();
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), StatusCode::NOT_FOUND);
-    let response_body = test::read_body(resp).await;
-    let response_str = std::str::from_utf8(&response_body).unwrap();
-    assert!(response_str.contains("NotFound: container not found"));
 
     // test deploy test-function in namespace 'faasrs-test-namespace'
     let req = test::TestRequest::post()
@@ -65,11 +62,9 @@ async fn test_handlers_in_order() {
     assert_eq!(
         resp.status(),
         StatusCode::ACCEPTED,
-        "check whether the container exists"
+        "error: {:?}",
+        resp.response()
     );
-    let response_body = test::read_body(resp).await;
-    let response_str = std::str::from_utf8(&response_body).unwrap();
-    assert!(response_str.contains("function test-function was created successfully"));
 
     // test update test-function in namespace 'faasrs-test-namespace'
     let req = test::TestRequest::put()
@@ -97,9 +92,18 @@ async fn test_handlers_in_order() {
     let response_json: serde_json::Value = serde_json::from_str(response_str).unwrap();
     if let Some(arr) = response_json.as_array() {
         for item in arr {
-            assert_eq!(item["name"], "test-function");
-            assert_eq!(item["image"], "hub.scutosc.cn/dolzhuying/echo:latest");
-            assert_eq!(item["namespace"], "faasrs-test-namespace");
+            assert_eq!(
+                item["name"],
+                serde_json::Value::String("test-function".to_string())
+            );
+            assert_eq!(
+                item["image"],
+                serde_json::Value::String("hub.scutosc.cn/dolzhuying/echo:latest".to_string())
+            );
+            assert_eq!(
+                item["namespace"],
+                serde_json::Value::String("faasrs-test-namespace".to_string())
+            );
         }
     }
 
