@@ -58,7 +58,8 @@ pub async fn proxy<P: Provider>(
             let upstream = provider
                 .resolve(function)
                 .await
-                .map_err(|_| ErrorMethodNotAllowed("Invalid function name"))?;
+                .map_err(|e| ErrorMethodNotAllowed(format!("Invalid function name {e}")))?;
+            log::trace!("upstream: {:?}", upstream);
             proxy_request(&req, payload, upstream, &meta.path).await
         }
         _ => Err(ErrorMethodNotAllowed("Method not allowed")),

@@ -1,55 +1,42 @@
-use std::net::IpAddr;
+use crate::consts;
 
-use crate::impls::error::ContainerdError;
-
-mod cni_impl;
+pub mod cni_impl;
 mod command;
-mod netns;
 mod util;
 
 pub use cni_impl::init_cni_network;
+use gateway::types::function::Query;
 
-#[derive(Debug)]
-pub struct CNIEndpoint {
-    pub cid: String,
-    pub ns: String,
-    pub ipcidr: cidr::IpInet,
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+pub struct Endpoint {
+    pub service: String,
+    pub namespace: String,
 }
 
-impl CNIEndpoint {
-    pub fn new(cid: &str, ns: &str) -> Result<Self, ContainerdError> {
-        let raw_ip = cni_impl::create_cni_network(cid, ns).map_err(|e| {
-            log::error!("Failed to create CNI network: {}", e);
-            ContainerdError::CreateContainerError(e.to_string())
-        })?;
-        log::trace!("CNI network created with Raw IP: {:?}", raw_ip);
-
-        let ipcidr = raw_ip.parse::<cidr::IpInet>().map_err(|e| {
-            log::error!("Failed to parse IP address: {}", e);
-            ContainerdError::CreateContainerError(e.to_string())
-        })?;
-
-        log::info!("CNI network created with IP: {:?}", ipcidr);
-        Ok(Self {
-            cid: cid.to_string(),
-            ns: ns.to_string(),
-            ipcidr,
-        })
-    }
-
-    fn delete(&mut self) {
-        cni_impl::delete_cni_network(&self.ns, &self.cid);
-    }
-
-    pub fn address(&self) -> IpAddr {
-        self.ipcidr.address()
+impl Endpoint {
+    pub fn new(service: &str, namespace: &str) -> Self {
+        Self {
+            service: service.to_string(),
+            namespace: namespace.to_string(),
+        }
     }
 }
 
-impl Drop for CNIEndpoint {
-    fn drop(&mut self) {
-        log::info!("Dropping CNIEndpoint");
-        self.delete();
+/// format `<namespace>-<service>` as netns name, also the identifier of each function
+impl std::fmt::Display for Endpoint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}-{}", self.namespace, self.service)
+    }
+}
+
+impl From<Query> for Endpoint {
+    fn from(query: Query) -> Self {
+        Self {
+            service: query.service,
+            namespace: query
+                .namespace
+                .unwrap_or(consts::DEFAULT_FUNCTION_NAMESPACE.to_string()),
+        }
     }
 }
 

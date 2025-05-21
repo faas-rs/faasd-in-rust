@@ -1,6 +1,7 @@
 use actix_web::App;
 use actix_web::http::StatusCode;
 use actix_web::test;
+use faas_containerd::consts::DEFAULT_FAASDRS_DATA_DIR;
 use gateway::bootstrap::config_app;
 use serde_json::json;
 
@@ -9,7 +10,7 @@ use serde_json::json;
 async fn test_handlers_in_order() {
     dotenv::dotenv().ok();
     faas_containerd::init_backend().await;
-    let provider = faas_containerd::provider::ContainerdProvider::new();
+    let provider = faas_containerd::provider::ContainerdProvider::new(DEFAULT_FAASDRS_DATA_DIR);
     let app = test::init_service(App::new().configure(config_app(provider))).await;
 
     // test proxy no-found-function in namespace 'faasrs-test-namespace'

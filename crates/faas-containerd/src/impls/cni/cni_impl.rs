@@ -1,9 +1,12 @@
 type Err = Box<dyn std::error::Error>;
 
+use derive_more::{Display, Error};
+use netns_rs::NetNs;
+use scopeguard::{ScopeGuard, guard};
 use serde_json::Value;
 use std::{fmt::Error, net::IpAddr, path::Path, sync::LazyLock};
 
-use super::{command as cmd, netns, util};
+use super::{Endpoint, command as cmd, util};
 
 static CNI_CONF_DIR: LazyLock<String> = LazyLock::new(|| {
     std::env::var("CNI_CONF_DIR").unwrap_or_else(|_| "/etc/cni/net.d".to_string())
@@ -26,52 +29,111 @@ pub fn init_cni_network() -> Result<(), Err> {
     )
 }
 
+#[derive(Debug, Display, Error)]
+pub struct NetworkError {
+    pub msg: String,
+}
+
 //TODO: 创建网络和删除网络的错误处理
-pub fn create_cni_network(cid: &str, ns: &str) -> Result<String, Err> {
-    let netns = util::netns_from_cid_and_cns(cid, ns);
-    let mut ip = String::new();
+pub fn create_cni_network(endpoint: &Endpoint) -> Result<(cidr::IpInet, NetNs), NetworkError> {
+    let net_ns = guard(
+        NetNs::new(endpoint.to_string()).map_err(|e| NetworkError {
+            msg: format!("Failed to create netns: {}", e),
+        })?,
+        |ns| ns.remove().unwrap(),
+    );
 
-    netns::create(&netns)?;
-
-    let output = cmd::cni_add_bridge(netns.as_str(), DEFAULT_NETWORK_NAME);
+    let output = cmd::cni_add_bridge(net_ns.path(), DEFAULT_NETWORK_NAME);
 
     match output {
         Ok(output) => {
             if !output.status.success() {
-                return Err(Box::new(Error));
+                return Err(NetworkError {
+                    msg: format!(
+                        "Failed to add CNI bridge: {}",
+                        String::from_utf8_lossy(&output.stderr)
+                    ),
+                });
             }
             let stdout = String::from_utf8_lossy(&output.stdout);
-            let json: Value = match serde_json::from_str(&stdout) {
+            let mut json: Value = match serde_json::from_str(&stdout) {
                 Ok(json) => json,
                 Err(e) => {
                     log::error!("Failed to parse JSON: {}", e);
-                    return Err(Box::new(e));
+                    return Err(NetworkError {
+                        msg: format!("Failed to parse JSON: {}", e),
+                    });
                 }
             };
-            if let Some(ips) = json.get("ips").and_then(|ips| ips.as_array()) {
-                if let Some(first_ip) = ips
-                    .first()
-                    .and_then(|ip| ip.get("address"))
-                    .and_then(|addr| addr.as_str())
-                {
-                    ip = first_ip.to_string();
+            log::trace!("CNI add bridge output: {:?}", json);
+            if let serde_json::Value::Array(ips) = json["ips"].take() {
+                let mut ip_list = Vec::new();
+                for mut ip in ips {
+                    if let serde_json::Value::String(ip_str) = ip["address"].take() {
+                        let ipcidr = ip_str.parse::<cidr::IpInet>().map_err(|e| {
+                            log::error!("Failed to parse IP address: {}", e);
+                            NetworkError { msg: e.to_string() }
+                        })?;
+                        ip_list.push(ipcidr);
+                    }
                 }
+                if ip_list.is_empty() {
+                    return Err(NetworkError {
+                        msg: "No IP address found in CNI output".to_string(),
+                    });
+                }
+                if ip_list.len() > 1 {
+                    log::warn!("Multiple IP addresses found in CNI output: {:?}", ip_list);
+                }
+                log::trace!("CNI network created with IP: {:?}", ip_list[0]);
+                Ok((ip_list[0], ScopeGuard::into_inner(net_ns)))
+            } else {
+                log::error!("Invalid JSON format: {:?}", json);
+                Err(NetworkError {
+                    msg: "Invalid JSON format".to_string(),
+                })
             }
         }
         Err(e) => {
             log::error!("Failed to add CNI bridge: {}", e);
-            return Err(Box::new(e));
+            Err(NetworkError {
+                msg: format!("Failed to add CNI bridge: {}", e),
+            })
         }
     }
-
-    Ok(ip)
 }
 
-pub fn delete_cni_network(ns: &str, cid: &str) {
-    let netns = util::netns_from_cid_and_cns(cid, ns);
+pub fn delete_cni_network(endpoint: Endpoint) -> Result<(), NetworkError> {
+    match NetNs::get(endpoint.to_string()) {
+        Ok(ns) => {
+            let e1 = cmd::cni_del_bridge(ns.path(), DEFAULT_NETWORK_NAME);
+            let e2 = ns.remove();
+            if e1.is_err() || e2.is_err() {
+                let err = format!(
+                    "NetNS exists, but failed to delete CNI network, cni bridge: {:?}, netns: {:?}",
+                    e1, e2
+                );
+                log::error!("{}", err);
+                return Err(NetworkError { msg: err });
+            }
+            Ok(())
+        }
+        Err(e) => {
+            let msg = format!("Failed to get netns {}: {}", endpoint, e);
+            log::warn!("{}", msg);
+            Err(NetworkError { msg })
+        }
+    }
+}
 
-    let _ = cmd::cni_del_bridge(&netns, DEFAULT_NETWORK_NAME);
-    let _ = netns::remove(&netns);
+#[inline]
+pub fn check_network_exists(addr: IpAddr) -> bool {
+    util::CNI_CONFIG_FILE
+        .get()
+        .unwrap()
+        .data_dir
+        .join(addr.to_string())
+        .exists()
 }
 
 #[allow(unused)]

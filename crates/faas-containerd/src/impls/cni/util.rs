@@ -1,14 +1,15 @@
 use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
-static mut CNI_CONFIG_FILE: Option<CniConfFile> = None;
+pub static CNI_CONFIG_FILE: OnceLock<CniConfFile> = OnceLock::new();
 
-/// Generate "cns-cid"
-#[inline(always)]
-pub fn netns_from_cid_and_cns(cid: &str, cns: &str) -> String {
-    format!("{}-{}", cns, cid)
-}
+// /// Generate "cns-cid"
+// #[inline(always)]
+// pub fn netns_name_from_cid_ns(cid: &str, cns: &str) -> String {
+//     format!("{}-{}", cns, cid)
+// }
 
 pub fn init_net_fs(
     conf_dir: &Path,
@@ -19,9 +20,9 @@ pub fn init_net_fs(
     data_dir: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let conf_file = CniConfFile::new(conf_dir, conf_filename, net_name, bridge, subnet, data_dir)?;
-    unsafe {
-        CNI_CONFIG_FILE = Some(conf_file);
-    }
+    CNI_CONFIG_FILE
+        .set(conf_file)
+        .map_err(|_| "Failed to set CNI_CONFIG_FILE")?;
     Ok(())
 }
 
@@ -56,9 +57,10 @@ fn cni_conf(name: &str, bridge: &str, subnet: &str, data_dir: &str) -> String {
     )
 }
 
-struct CniConfFile {
-    conf_dir: PathBuf,
-    conf_filename: String,
+pub(super) struct CniConfFile {
+    pub conf_dir: PathBuf,
+    pub conf_filename: String,
+    pub data_dir: PathBuf,
 }
 
 impl CniConfFile {
@@ -80,9 +82,11 @@ impl CniConfFile {
         let net_config = conf_dir.join(conf_filename);
         File::create(&net_config)?
             .write_all(cni_conf(net_name, bridge, subnet, data_dir).as_bytes())?;
+        let data_dir = PathBuf::from(data_dir);
         Ok(Self {
             conf_dir: conf_dir.to_path_buf(),
             conf_filename: conf_filename.to_string(),
+            data_dir: data_dir.join(net_name),
         })
     }
 }

@@ -4,16 +4,17 @@ use gateway::{
 };
 
 use crate::{
-    impls::{backend, container::ContainerError},
+    impls::{backend, cni::Endpoint, container::ContainerError},
     provider::ContainerdProvider,
 };
 
 impl ContainerdProvider {
     pub(crate) async fn _status(&self, function: Query) -> Result<Status, ResolveError> {
-        let container = backend().load_container(&function).await.map_err(|e| {
+        let endpoint: Endpoint = function.into();
+        let container = backend().load_container(&endpoint).await.map_err(|e| {
             log::error!(
                 "failed to load container for function {:?} because {:?}",
-                function,
+                endpoint,
                 e
             );
             match e {
@@ -26,10 +27,7 @@ impl ContainerdProvider {
         let created_at = container.created_at.unwrap().to_string();
         let mut replicas = 0;
 
-        let namespace = function.namespace.unwrap();
-        let service = function.service;
-
-        match backend().get_task(&service, &namespace).await {
+        match backend().get_task(&endpoint).await {
             Ok(task) => {
                 let status = task.status;
                 if status == 2 || status == 3 {
@@ -39,7 +37,7 @@ impl ContainerdProvider {
             Err(e) => {
                 log::warn!(
                     "failed to get task for function {:?} because {:?}",
-                    &service,
+                    &endpoint,
                     e
                 );
             }
@@ -48,7 +46,7 @@ impl ContainerdProvider {
         // 大部分字段并未实现，使用None填充
         let status = Status {
             name: container.id,
-            namespace: Some(namespace),
+            namespace: Some(endpoint.namespace),
             image: container.image,
             env_process: None,
             env_vars: None,

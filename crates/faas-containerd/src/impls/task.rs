@@ -12,12 +12,20 @@ use tonic::Request;
 
 use crate::impls::error::ContainerdError;
 
-use super::ContainerdService;
+use super::{ContainerdService, cni::Endpoint};
 
 impl ContainerdService {
     /// 创建并启动任务
-    pub async fn new_task(&self, cid: &str, ns: &str) -> Result<(), ContainerdError> {
-        let mounts = self.get_mounts(cid, ns).await?;
+    pub async fn new_task(
+        &self,
+        mounts: Vec<Mount>,
+        endpoint: &Endpoint,
+    ) -> Result<(), ContainerdError> {
+        let Endpoint {
+            service: cid,
+            namespace: ns,
+        } = endpoint;
+        // let mounts = self.get_mounts(cid, ns).await?;
         self.do_create_task(cid, ns, mounts).await?;
         self.do_start_task(cid, ns).await?;
         Ok(())
@@ -63,7 +71,11 @@ impl ContainerdService {
         Ok(())
     }
 
-    pub async fn get_task(&self, cid: &str, ns: &str) -> Result<Process, ContainerdError> {
+    pub async fn get_task(&self, endpoint: &Endpoint) -> Result<Process, ContainerdError> {
+        let Endpoint {
+            service: cid,
+            namespace: ns,
+        } = endpoint;
         let mut tc = self.client.tasks();
 
         let request = ListTasksRequest {
@@ -76,14 +88,17 @@ impl ContainerdService {
         })?;
         let tasks = response.into_inner().tasks;
 
-        let task =
-            tasks
-                .into_iter()
-                .find(|task| task.id == cid)
-                .ok_or_else(|| -> ContainerdError {
-                    log::error!("Task not found for container: {}", cid);
-                    ContainerdError::CreateTaskError("Task not found".to_string())
-                })?;
+        let task = tasks
+            .into_iter()
+            .map(|task| {
+                log::trace!("Task: {:?}", task);
+                task
+            })
+            .find(|task| task.id == *cid)
+            .ok_or_else(|| -> ContainerdError {
+                log::error!("Task not found for container: {}", cid);
+                ContainerdError::CreateTaskError("Task not found".to_string())
+            })?;
 
         Ok(task)
     }
@@ -175,7 +190,11 @@ impl ContainerdService {
     }
 
     /// 杀死并删除任务
-    pub async fn kill_task_with_timeout(&self, cid: &str, ns: &str) -> Result<(), ContainerdError> {
+    pub async fn kill_task_with_timeout(&self, endpoint: &Endpoint) -> Result<(), ContainerdError> {
+        let Endpoint {
+            service: cid,
+            namespace: ns,
+        } = endpoint;
         let kill_timeout = Duration::from_secs(5);
         let wait_future = self.do_wait_task(cid, ns);
         self.do_kill_task(cid, ns).await?;

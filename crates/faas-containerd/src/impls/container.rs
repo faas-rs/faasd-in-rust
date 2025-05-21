@@ -4,13 +4,10 @@ use containerd_client::{
 };
 
 use derive_more::Display;
-use gateway::types::function::Query;
-
-use crate::consts::DEFAULT_FUNCTION_NAMESPACE;
 
 use containerd_client::services::v1::container::Runtime;
 
-use super::{ContainerdService, backend, function::ContainerStaticMetadata};
+use super::{ContainerdService, backend, cni::Endpoint, function::ContainerStaticMetadata};
 use tonic::Request;
 
 #[derive(Debug, Display)]
@@ -27,7 +24,7 @@ impl ContainerdService {
         metadata: &ContainerStaticMetadata,
     ) -> Result<Container, ContainerError> {
         let container = Container {
-            id: metadata.container_id.clone(),
+            id: metadata.endpoint.service.clone(),
             image: metadata.image.clone(),
             runtime: Some(Runtime {
                 name: "io.containerd.runc.v2".to_string(),
@@ -38,7 +35,7 @@ impl ContainerdService {
                 ContainerError::Internal
             })?),
             snapshotter: crate::consts::DEFAULT_SNAPSHOTTER.to_string(),
-            snapshot_key: metadata.container_id.clone(),
+            snapshot_key: metadata.endpoint.service.clone(),
             ..Default::default()
         };
 
@@ -48,7 +45,7 @@ impl ContainerdService {
         };
 
         let resp = cc
-            .create(with_namespace!(req, metadata.namespace))
+            .create(with_namespace!(req, metadata.endpoint.namespace))
             .await
             .map_err(|e| {
                 log::error!("Failed to create container: {}", e);
@@ -59,18 +56,16 @@ impl ContainerdService {
     }
 
     /// 删除容器
-    pub async fn delete_container(
-        &self,
-        container_id: &str,
-        namespace: &str,
-    ) -> Result<(), ContainerError> {
+    pub async fn delete_container(&self, endpoint: &Endpoint) -> Result<(), ContainerError> {
+        let Endpoint {
+            service: cid,
+            namespace: ns,
+        } = endpoint;
         let mut cc = self.client.containers();
 
-        let delete_request = DeleteContainerRequest {
-            id: container_id.to_string(),
-        };
+        let delete_request = DeleteContainerRequest { id: cid.clone() };
 
-        cc.delete(with_namespace!(delete_request, namespace))
+        cc.delete(with_namespace!(delete_request, ns))
             .await
             .map_err(|e| {
                 log::error!("Failed to delete container: {}", e);
@@ -80,20 +75,15 @@ impl ContainerdService {
     }
 
     /// 根据查询条件加载容器参数
-    pub async fn load_container(&self, query: &Query) -> Result<Container, ContainerError> {
+    pub async fn load_container(&self, endpoint: &Endpoint) -> Result<Container, ContainerError> {
         let mut cc = self.client.containers();
 
         let request = GetContainerRequest {
-            id: query.service.clone(),
+            id: endpoint.service.clone(),
         };
 
-        let namespace = query
-            .namespace
-            .clone()
-            .unwrap_or(DEFAULT_FUNCTION_NAMESPACE.to_string());
-
         let resp = cc
-            .get(with_namespace!(request, namespace))
+            .get(with_namespace!(request, endpoint.namespace))
             .await
             .map_err(|e| {
                 log::error!("Failed to list containers: {}", e);

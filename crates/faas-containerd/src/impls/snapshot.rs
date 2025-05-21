@@ -7,9 +7,10 @@ use tonic::Request;
 
 use crate::impls::error::ContainerdError;
 
-use super::{ContainerdService, function::ContainerStaticMetadata};
+use super::{ContainerdService, cni::Endpoint, function::ContainerStaticMetadata};
 
 impl ContainerdService {
+    #[allow(unused)]
     pub(super) async fn get_mounts(
         &self,
         cid: &str,
@@ -36,18 +37,16 @@ impl ContainerdService {
     pub async fn prepare_snapshot(
         &self,
         container: &ContainerStaticMetadata,
-    ) -> Result<(), ContainerdError> {
+    ) -> Result<Vec<Mount>, ContainerdError> {
         let parent_snapshot = self
-            .get_parent_snapshot(&container.image, &container.namespace)
+            .get_parent_snapshot(&container.image, &container.endpoint.namespace)
             .await?;
         self.do_prepare_snapshot(
-            &container.container_id,
-            &container.namespace,
+            &container.endpoint.service,
+            &container.endpoint.namespace,
             parent_snapshot,
         )
-        .await?;
-
-        Ok(())
+        .await
     }
 
     async fn do_prepare_snapshot(
@@ -55,7 +54,7 @@ impl ContainerdService {
         cid: &str,
         ns: &str,
         parent_snapshot: String,
-    ) -> Result<(), ContainerdError> {
+    ) -> Result<Vec<Mount>, ContainerdError> {
         let req = PrepareSnapshotRequest {
             snapshotter: crate::consts::DEFAULT_SNAPSHOTTER.to_string(),
             key: cid.to_string(),
@@ -73,7 +72,7 @@ impl ContainerdService {
 
         log::trace!("Prepare snapshot response: {:?}", resp);
 
-        Ok(())
+        Ok(resp.into_inner().mounts)
     }
 
     async fn get_parent_snapshot(
@@ -114,16 +113,18 @@ impl ContainerdService {
         Ok(ret)
     }
 
-    pub async fn remove_snapshot(&self, cid: &str, ns: &str) -> Result<(), ContainerdError> {
+    pub async fn remove_snapshot(&self, endpoint: &Endpoint) -> Result<(), ContainerdError> {
         let mut sc = self.client.snapshots();
         let req = RemoveSnapshotRequest {
             snapshotter: crate::consts::DEFAULT_SNAPSHOTTER.to_string(),
-            key: cid.to_string(),
+            key: endpoint.service.clone(),
         };
-        sc.remove(with_namespace!(req, ns)).await.map_err(|e| {
-            log::error!("Failed to delete snapshot: {}", e);
-            ContainerdError::DeleteContainerError(e.to_string())
-        })?;
+        sc.remove(with_namespace!(req, endpoint.namespace))
+            .await
+            .map_err(|e| {
+                log::error!("Failed to delete snapshot: {}", e);
+                ContainerdError::DeleteContainerError(e.to_string())
+            })?;
 
         Ok(())
     }

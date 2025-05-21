@@ -1,4 +1,6 @@
-use super::{ContainerdService, error::ContainerdError, function::ContainerStaticMetadata};
+use super::{
+    ContainerdService, cni::Endpoint, error::ContainerdError, function::ContainerStaticMetadata,
+};
 use crate::consts::{VERSION_DEV, VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH};
 use oci_spec::{
     image::ImageConfiguration,
@@ -16,10 +18,6 @@ fn oci_version() -> String {
         "{}.{}.{}{}",
         VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH, VERSION_DEV
     )
-}
-
-fn netns(ns: &str, cid: &str) -> String {
-    format!("{}-{}", ns, cid)
 }
 
 pub(super) fn generate_default_unix_spec(
@@ -128,7 +126,7 @@ pub(super) fn generate_default_unix_spec(
                         .unwrap(),
                     LinuxNamespaceBuilder::default()
                         .typ(LinuxNamespaceType::Network)
-                        .path(format!("/var/run/netns/{}", netns(ns, cid)))
+                        .path(format!("/var/run/netns/{}", Endpoint::new(cid, ns)))
                         .build()
                         .unwrap(),
                 ])
@@ -303,7 +301,7 @@ impl ContainerdService {
         metadata: &ContainerStaticMetadata,
     ) -> Result<prost_types::Any, ContainerdError> {
         let image_conf = self
-            .image_config(&metadata.image, &metadata.namespace)
+            .image_config(&metadata.image, &metadata.endpoint.namespace)
             .await
             .map_err(|e| {
                 log::error!("Failed to get image config: {}", e);
@@ -312,8 +310,11 @@ impl ContainerdService {
 
         let rt_conf = RuntimeConfig::try_from(image_conf)?;
 
-        let spec =
-            generate_default_unix_spec(&metadata.namespace, &metadata.container_id, &rt_conf)?;
+        let spec = generate_default_unix_spec(
+            &metadata.endpoint.namespace,
+            &metadata.endpoint.service,
+            &rt_conf,
+        )?;
         let spec_json = serde_json::to_string(&spec).map_err(|e| {
             log::error!("Failed to serialize spec to JSON: {}", e);
             ContainerdError::GenerateSpecError(e.to_string())

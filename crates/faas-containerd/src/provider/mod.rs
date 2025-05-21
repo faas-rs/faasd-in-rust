@@ -1,6 +1,6 @@
 pub mod function;
 
-use std::{collections::HashMap, sync::Arc};
+use std::{path::Path, sync::Arc};
 
 use gateway::{
     handlers::function::{DeleteError, DeployError, ListError, ResolveError, UpdateError},
@@ -8,16 +8,16 @@ use gateway::{
     types::function::{Deployment, Query, Status},
 };
 
-use crate::impls::function::FunctionInstance;
-
 pub struct ContainerdProvider {
-    pub ctr_instance_map: tokio::sync::Mutex<HashMap<Query, FunctionInstance>>,
+    // pub ctr_instance_map: tokio::sync::Mutex<HashMap<Query, FunctionInstance>>,
+    database: sled::Db,
 }
 
 impl ContainerdProvider {
-    pub fn new() -> Arc<Self> {
+    pub fn new<P: AsRef<Path>>(path: P) -> Arc<Self> {
         Arc::new(ContainerdProvider {
-            ctr_instance_map: tokio::sync::Mutex::new(HashMap::new()),
+            // ctr_instance_map: tokio::sync::Mutex::new(HashMap::new()),
+            database: sled::open(path).unwrap(),
         })
     }
 }

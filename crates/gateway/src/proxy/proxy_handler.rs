@@ -13,6 +13,7 @@ pub async fn proxy_request(
         log::error!("Failed to build URI: {}", e);
         ErrorInternalServerError("Failed to build URI")
     })?;
+    log::trace!("Proxying request to: {}", uri);
     // Handle the error conversion explicitly
     let proxy_resp = create_proxy_request(req, uri, payload).await.map_err(|e| {
         log::error!("Failed to create proxy request: {}", e);
