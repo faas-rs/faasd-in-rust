@@ -1,6 +1,14 @@
+use std::collections::HashMap;
+
 use crate::{
-    handlers::function::{DeleteError, DeployError, ListError, ResolveError, UpdateError},
-    types::function::{Deployment, Query, Status},
+    handlers::{
+        function::{DeleteError, DeployError, ListError, ResolveError, UpdateError},
+        namespace::NamespaceError,
+    },
+    types::{
+        function::{Deployment, Query, Status},
+        namespace::Namespace,
+    },
 };
 
 pub trait Provider: Send + Sync + 'static {
@@ -42,4 +50,30 @@ pub trait Provider: Send + Sync + 'static {
         &self,
         function: Query,
     ) -> impl std::future::Future<Output = Result<Status, ResolveError>> + Send;
+
+    fn create_namespace(
+        &self,
+        namespace: String,
+        labels: HashMap<String, String>,
+    ) -> impl std::future::Future<Output = Result<(), NamespaceError>> + Send;
+
+    fn update_namespace(
+        &self,
+        namespace: String,
+        labels: HashMap<String, String>,
+    ) -> impl std::future::Future<Output = Result<(), NamespaceError>> + Send;
+
+    fn delete_namespace(
+        &self,
+        namespace: String,
+    ) -> impl std::future::Future<Output = Result<(), NamespaceError>> + Send;
+
+    fn get_namespace(
+        &self,
+        namespace: String,
+    ) -> impl std::future::Future<Output = Result<Namespace, NamespaceError>> + Send;
+
+    fn namespace_list(
+        &self,
+    ) -> impl std::future::Future<Output = Result<Vec<Namespace>, NamespaceError>> + Send;
 }

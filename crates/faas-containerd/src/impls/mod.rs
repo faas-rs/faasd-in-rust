@@ -2,6 +2,7 @@ pub mod cni;
 pub mod container;
 pub mod error;
 pub mod function;
+pub mod namespace;
 pub mod oci_image;
 pub mod snapshot;
 pub mod spec;

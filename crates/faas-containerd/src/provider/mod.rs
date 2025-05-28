@@ -1,11 +1,16 @@
 pub mod function;
-
-use std::{path::Path, sync::Arc};
+use std::{collections::HashMap, path::Path, sync::Arc};
 
 use gateway::{
-    handlers::function::{DeleteError, DeployError, ListError, ResolveError, UpdateError},
+    handlers::{
+        function::{DeleteError, DeployError, ListError, ResolveError, UpdateError},
+        namespace::NamespaceError,
+    },
     provider::Provider,
-    types::function::{Deployment, Query, Status},
+    types::{
+        function::{Deployment, Query, Status},
+        namespace::Namespace,
+    },
 };
 
 pub struct ContainerdProvider {
@@ -45,5 +50,33 @@ impl Provider for ContainerdProvider {
 
     async fn status(&self, function: Query) -> Result<Status, ResolveError> {
         self._status(function).await
+    }
+
+    async fn create_namespace(
+        &self,
+        namespace: String,
+        labels: HashMap<String, String>,
+    ) -> Result<(), NamespaceError> {
+        self._create_namespace(namespace, labels).await
+    }
+
+    async fn update_namespace(
+        &self,
+        namespace: String,
+        labels: HashMap<String, String>,
+    ) -> Result<(), NamespaceError> {
+        self._update_namespace(namespace, labels).await
+    }
+
+    async fn delete_namespace(&self, namespace: String) -> Result<(), NamespaceError> {
+        self._delete_namespace(namespace).await
+    }
+
+    async fn get_namespace(&self, namespace: String) -> Result<Namespace, NamespaceError> {
+        self._get_namespace(namespace).await
+    }
+
+    async fn namespace_list(&self) -> Result<Vec<Namespace>, NamespaceError> {
+        self._namespace_list().await
     }
 }

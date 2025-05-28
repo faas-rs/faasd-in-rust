@@ -1,4 +1,5 @@
 pub mod function;
+pub mod namespace;
 pub mod proxy;
 
 #[derive(Debug, thiserror::Error)]

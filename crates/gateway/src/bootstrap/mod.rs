@@ -36,25 +36,34 @@ pub fn config_app<P: Provider>(provider: Arc<P>) -> impl FnOnce(&mut ServiceConf
                     .service(
                         web::resource("/function/{functionName}")
                             .route(web::get().to(handlers::function::status::<P>)),
-                    ), //         .service(
-                       //             web::resource("/scale-function/{name}")
-                       //                 .route(web::post().to(handlers::scale_function)),
-                       //         )
-                       //         .service(web::resource("/info").route(web::get().to(handlers::info)))
-                       //         .service(
-                       //             web::resource("/secrets")
-                       //                 .route(web::get().to(handlers::secrets))
-                       //                 .route(web::post().to(handlers::secrets))
-                       //                 .route(web::put().to(handlers::secrets))
-                       //                 .route(web::delete().to(handlers::secrets)),
-                       //         )
-                       //         .service(web::resource("/logs").route(web::get().to(handlers::logs)))
-                       //         .service(
-                       //             web::resource("/namespaces")
-                       //                 .route(web::get().to(handlers::list_namespaces))
-                       //                 .route(web::post().to(handlers::mutate_namespace)),
-                       //         ),
-                       // )
+                    )
+                    .service(
+                        web::resource("/namespace/{namespace}")
+                            .route(web::to(handlers::namespace::mut_namespace::<P>)),
+                    )
+                    .service(
+                        web::resource("/namespaces")
+                            .route(web::get().to(handlers::namespace::namespace_list::<P>)),
+                    ),
+                //         .service(
+                //             web::resource("/scale-function/{name}")
+                //                 .route(web::post().to(handlers::scale_function)),
+                //         )
+                //         .service(web::resource("/info").route(web::get().to(handlers::info)))
+                //         .service(
+                //             web::resource("/secrets")
+                //                 .route(web::get().to(handlers::secrets))
+                //                 .route(web::post().to(handlers::secrets))
+                //                 .route(web::put().to(handlers::secrets))
+                //                 .route(web::delete().to(handlers::secrets)),
+                //         )
+                //         .service(web::resource("/logs").route(web::get().to(handlers::logs)))
+                //         .service(
+                //             web::resource("/namespaces")
+                //                 .route(web::get().to(handlers::list_namespaces))
+                //                 .route(web::post().to(handlers::mutate_namespace)),
+                //         ),
+                // )
             )
             .service(web::scope("/function").service(
                 web::resource(PROXY_DISPATCH_PATH).route(web::to(handlers::proxy::proxy::<P>)),
