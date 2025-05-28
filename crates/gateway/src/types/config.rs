@@ -1,3 +1,4 @@
+use rand::{Rng, distributions::Alphanumeric};
 use std::time::Duration;
 
 const DEFAULT_READ_TIMEOUT: Duration = Duration::from_secs(10);
@@ -13,6 +14,8 @@ pub struct FaaSConfig {
     pub secret_mount_path: String,
     pub max_idle_conns: usize,
     pub max_idle_conns_per_host: usize,
+    pub basic_auth_password: String,
+    pub basic_auth_username: String,
 }
 
 impl Default for FaaSConfig {
@@ -23,6 +26,11 @@ impl Default for FaaSConfig {
 
 impl FaaSConfig {
     pub fn new() -> Self {
+        let random_password: String = rand::thread_rng()
+            .sample_iter(&Alphanumeric)
+            .take(16)
+            .map(char::from)
+            .collect();
         Self {
             tcp_port: None,
             read_timeout: Duration::from_secs(10),
@@ -32,6 +40,8 @@ impl FaaSConfig {
             secret_mount_path: String::from("/var/openfaas/secrets"),
             max_idle_conns: 0,
             max_idle_conns_per_host: 10,
+            basic_auth_username: "admin".to_string(),
+            basic_auth_password: random_password,
         }
     }
     pub fn get_read_timeout(&self) -> Duration {
