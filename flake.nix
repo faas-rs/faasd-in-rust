@@ -38,6 +38,7 @@
             openssl
             protobuf
             pkg-config
+            pkgs.postgresql
           ];
 
           nativeBuildInputs = with pkgs; [

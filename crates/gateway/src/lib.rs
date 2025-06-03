@@ -4,3 +4,5 @@ pub mod handlers;
 pub mod provider;
 pub mod proxy;
 pub mod types;
+pub mod oauth;
+pub mod models;
