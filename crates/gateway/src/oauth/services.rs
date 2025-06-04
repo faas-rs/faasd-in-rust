@@ -10,9 +10,11 @@ use argon2::{
     },
     Argon2
 };
-
-// 更新后的密码哈希函数
 pub fn hash_password(password: &str) -> Result<String, Error> { // 返回 Result 类型
+    if password.is_empty() {
+        log::error!("Password cannot be empty");
+        return Err(Error::PasswordHashingError("Password cannot be empty".to_string()));
+    }
     let salt = SaltString::generate(&mut OsRng);
 
     // Argon2 with default params (Argon2id v19)
@@ -132,5 +134,91 @@ impl UserService {
         conn: &mut PooledConnection<'_, AsyncPgConnection>,
     ) -> Result<User, Error> {
         User::update_username_by_uid(input_uid, new_username, conn).await
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use diesel_async::pooled_connection::bb8::{ Pool, PooledConnection};
+use diesel_async::{AsyncPgConnection, RunQueryDsl};
+ use crate::models::schema::users::dsl::users; // 导入表定义
+    use crate::models::*;
+    async fn setup_test_db()-> Pool<AsyncPgConnection>{
+        let database_url="postgres://dragonos:vitus@localhost/faasd_rs_db"; 
+        let pool =db::create_pool(database_url).await;
+        return pool;
+    }
+async fn clear_users_table(conn: &mut PooledConnection<'_, AsyncPgConnection>) {
+diesel::delete(users).execute(conn).await.expect("Failed to clear users table");
+}
+    #[tokio::test]
+    async fn test_register_user_success() {
+        let pool = setup_test_db().await;
+        let mut conn = pool.get().await.expect("Failed to get connection");
+
+        // 清理测试数据
+        clear_users_table(&mut conn).await;
+
+        let username = "test_user";
+        let password = "test_password";
+
+        // 调用注册方法
+        let result = UserService::register_user(username.to_string(), password.to_string(), &mut conn).await;
+
+        // 验证结果
+        assert!(result.is_ok(), "User registration failed");
+        let user = result.unwrap();
+        assert_eq!(user.username, username, "Username mismatch");
+        assert!(!user.password_hash.is_empty(), "Password hash should not be empty");
+
+        // 验证数据库中是否插入了用户
+        let db_user = UserService::find_user_by_username(username, &mut conn).await.expect("Failed to query user");
+        assert_eq!(db_user.uid, user.uid, "UID mismatch");
+        assert_eq!(db_user.username, user.username, "Username mismatch");
+        clear_users_table(&mut conn).await;
+    }
+
+    #[tokio::test]
+    async fn test_register_user_duplicate_username() {
+        let pool = setup_test_db().await;
+        let mut conn = pool.get().await.expect("Failed to get connection");
+
+        // 清理测试数据
+        clear_users_table(&mut conn).await;
+
+        let username = "duplicate_user";
+        let password = "test_password";
+
+        // 第一次注册
+        let _ = UserService::register_user(username.to_string(), password.to_string(), &mut conn).await;
+
+        // 第二次注册，应该失败
+        let result = UserService::register_user(username.to_string(), password.to_string(), &mut conn).await;
+
+        // 验证结果
+        assert!(result.is_err(), "Duplicate username should fail");
+        let error = result.err().unwrap();
+        assert!(matches!(error, Error::DieselError(_)), "Expected DieselError for duplicate username");
+         clear_users_table(&mut conn).await;
+    }
+
+    #[tokio::test]
+    async fn test_register_user_password_hash_failure() {
+        let pool = setup_test_db().await;
+        let mut conn = pool.get().await.expect("Failed to get connection");
+        // 清理测试数据
+        clear_users_table(&mut conn).await;
+
+        let username = "hash_failure_user";
+        let password = ""; //空密码会哈希失败
+
+        // 调用注册方法
+        let result = UserService::register_user(username.to_string(), password.to_string(), &mut conn).await;
+
+        // 验证结果
+        assert!(result.is_err(), "Password hashing failure should fail");
+        let error = result.err().unwrap();
+        assert!(matches!(error, Error::PasswordHashingError(_)), "Expected PasswordHashingError");
+                clear_users_table(&mut conn).await;
     }
 }
