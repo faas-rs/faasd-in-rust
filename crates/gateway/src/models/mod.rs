@@ -1,6 +1,5 @@
 pub mod schema;
 pub mod db;
-
 use chrono::NaiveDateTime;
 use diesel::prelude::*;
 // 确保 Insertable, Queryable, Selectable, Identifiable, AsChangeset 被导入
@@ -9,21 +8,19 @@ use diesel_async::pooled_connection::bb8::PooledConnection;
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-
-// 从 schema 模块导入表和 DSL (列名)
-// 假设你的 schema.rs 在 pub mod schema; 中定义了 users 表
 use crate::models::schema::users; // 导入表定义
 use crate::models::schema::users::dsl::*; // 导入列名 uid, username 等
 
-// --- 定义 Error 类型 ---
-// 你需要根据你的项目定义这个 Error 枚举
-// 这里是一个占位符示例
 #[derive(Debug)]
 pub enum Error {
     DieselError(diesel::result::Error),
     NotFound,
-    Conflict, // 用户名已存在等冲突
-    // 可以添加其他自定义错误类型
+    Conflict, 
+    PasswordHashingError(String),
+
+    JwtError(String), 
+    TokenExpired, 
+    InvalidToken,
 }
 
 impl From<diesel::result::Error> for Error {
