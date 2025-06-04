@@ -1,19 +1,19 @@
 // src/services.rs
-use crate::models::{User, NewUser};  // 引入 models 中的 User 和 NewUser
 use crate::models::Error;
-use diesel_async::pooled_connection::bb8::PooledConnection;
-use diesel_async::AsyncPgConnection;
+use crate::models::{NewUser, User}; // 引入 models 中的 User 和 NewUser
 use argon2::{
-    password_hash::{
-        rand_core::OsRng,
-        PasswordHash, PasswordHasher, PasswordVerifier, SaltString
-    },
-    Argon2
+    Argon2,
+    password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString, rand_core::OsRng},
 };
-pub fn hash_password(password: &str) -> Result<String, Error> { // 返回 Result 类型
+use diesel_async::AsyncPgConnection;
+use diesel_async::pooled_connection::bb8::PooledConnection;
+pub fn hash_password(password: &str) -> Result<String, Error> {
+    // 返回 Result 类型
     if password.is_empty() {
         log::error!("Password cannot be empty");
-        return Err(Error::PasswordHashingError("Password cannot be empty".to_string()));
+        return Err(Error::PasswordHashingError(
+            "Password cannot be empty".to_string(),
+        ));
     }
     let salt = SaltString::generate(&mut OsRng);
 
@@ -31,16 +31,26 @@ pub fn hash_password(password: &str) -> Result<String, Error> { // 返回 Result
         }
     }
 }
-pub fn verify_password(hashed_password_from_db: &str, password_to_verify: &str) -> Result<bool, Error> {
+pub fn verify_password(
+    hashed_password_from_db: &str,
+    password_to_verify: &str,
+) -> Result<bool, Error> {
     // 从数据库中存储的哈希字符串（PHC string format）解析出 PasswordHash 对象
     // 这个对象包含了哈希值本身以及哈希时使用的参数（如 salt, version, algorithm等）
     let parsed_hash = match PasswordHash::new(hashed_password_from_db) {
         Ok(h) => h,
         Err(e) => {
-            log::error!("Failed to parse stored password hash: {}. Hash string: '{}'", e, hashed_password_from_db);
+            log::error!(
+                "Failed to parse stored password hash: {}. Hash string: '{}'",
+                e,
+                hashed_password_from_db
+            );
             // 如果存储的哈希格式不正确，这通常是一个严重的问题，但也应视为验证失败
             // 返回一个特定的错误或通用的密码哈希错误
-            return Err(Error::PasswordHashingError(format!("Invalid stored hash format: {}", e)));
+            return Err(Error::PasswordHashingError(format!(
+                "Invalid stored hash format: {}",
+                e
+            )));
         }
     };
 
@@ -62,8 +72,14 @@ pub fn verify_password(hashed_password_from_db: &str, password_to_verify: &str) 
         Err(e) => {
             // 其他类型的错误，例如参数不匹配（不太可能发生，因为参数来自 parsed_hash）
             // 或者其他内部错误。
-            log::error!("Password verification failed with unexpected error: {:?}", e);
-            Err(Error::PasswordHashingError(format!("Verification process error: {}", e)))
+            log::error!(
+                "Password verification failed with unexpected error: {:?}",
+                e
+            );
+            Err(Error::PasswordHashingError(format!(
+                "Verification process error: {}",
+                e
+            )))
         }
     }
 }
@@ -75,16 +91,20 @@ impl UserService {
         username_val: String,
         plain_password: String,
         conn: &mut PooledConnection<'_, AsyncPgConnection>,
-    )-> Result<User,Error>{
+    ) -> Result<User, Error> {
         log::info!("Attempting to register user with username:{}", username_val);
-        let hashed_password=match hash_password(&plain_password) {
-         Ok(phc) => phc,
+        let hashed_password = match hash_password(&plain_password) {
+            Ok(phc) => phc,
             Err(e) => {
-                log::error!("Password hashing failed during registration for user {}: {:?}", username_val, e);
+                log::error!(
+                    "Password hashing failed during registration for user {}: {:?}",
+                    username_val,
+                    e
+                );
                 return Err(e);
             }
         };
-         log::debug!("Password hashed successfully for user: {}", username_val);
+        log::debug!("Password hashed successfully for user: {}", username_val);
 
         let new_user_data = NewUser {
             username: username_val.clone(),
@@ -94,7 +114,11 @@ impl UserService {
         // 调用模型层的 create 方法
         match new_user_data.create(conn).await {
             Ok(user) => {
-                log::info!("User {} registered successfully with uid: {}", user.username, user.uid);
+                log::info!(
+                    "User {} registered successfully with uid: {}",
+                    user.username,
+                    user.uid
+                );
                 Ok(user)
             }
             Err(e) => {
@@ -102,7 +126,7 @@ impl UserService {
                 Err(e)
             }
         }
-    }   
+    }
     // 创建用户
     pub async fn create_user(
         new_user: &NewUser,
@@ -139,18 +163,21 @@ impl UserService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use diesel_async::pooled_connection::bb8::{ Pool, PooledConnection};
-use diesel_async::{AsyncPgConnection, RunQueryDsl};
- use crate::models::schema::users::dsl::users; // 导入表定义
+    use crate::models::schema::users::dsl::users; // 导入表定义
     use crate::models::*;
-    async fn setup_test_db()-> Pool<AsyncPgConnection>{
-        let database_url="postgres://dragonos:vitus@localhost/faasd_rs_db"; 
-        let pool =db::create_pool(database_url).await;
+    use diesel_async::pooled_connection::bb8::{Pool, PooledConnection};
+    use diesel_async::{AsyncPgConnection, RunQueryDsl};
+    async fn setup_test_db() -> Pool<AsyncPgConnection> {
+        let database_url = "postgres://dragonos:vitus@localhost/faasd_rs_db";
+        let pool = db::create_pool(database_url).await;
         return pool;
     }
-async fn clear_users_table(conn: &mut PooledConnection<'_, AsyncPgConnection>) {
-diesel::delete(users).execute(conn).await.expect("Failed to clear users table");
-}
+    async fn clear_users_table(conn: &mut PooledConnection<'_, AsyncPgConnection>) {
+        diesel::delete(users)
+            .execute(conn)
+            .await
+            .expect("Failed to clear users table");
+    }
     #[tokio::test]
     async fn test_register_user_success() {
         let pool = setup_test_db().await;
@@ -163,16 +190,22 @@ diesel::delete(users).execute(conn).await.expect("Failed to clear users table");
         let password = "test_password";
 
         // 调用注册方法
-        let result = UserService::register_user(username.to_string(), password.to_string(), &mut conn).await;
+        let result =
+            UserService::register_user(username.to_string(), password.to_string(), &mut conn).await;
 
         // 验证结果
         assert!(result.is_ok(), "User registration failed");
         let user = result.unwrap();
         assert_eq!(user.username, username, "Username mismatch");
-        assert!(!user.password_hash.is_empty(), "Password hash should not be empty");
+        assert!(
+            !user.password_hash.is_empty(),
+            "Password hash should not be empty"
+        );
 
         // 验证数据库中是否插入了用户
-        let db_user = UserService::find_user_by_username(username, &mut conn).await.expect("Failed to query user");
+        let db_user = UserService::find_user_by_username(username, &mut conn)
+            .await
+            .expect("Failed to query user");
         assert_eq!(db_user.uid, user.uid, "UID mismatch");
         assert_eq!(db_user.username, user.username, "Username mismatch");
         clear_users_table(&mut conn).await;
@@ -190,16 +223,21 @@ diesel::delete(users).execute(conn).await.expect("Failed to clear users table");
         let password = "test_password";
 
         // 第一次注册
-        let _ = UserService::register_user(username.to_string(), password.to_string(), &mut conn).await;
+        let _ =
+            UserService::register_user(username.to_string(), password.to_string(), &mut conn).await;
 
         // 第二次注册，应该失败
-        let result = UserService::register_user(username.to_string(), password.to_string(), &mut conn).await;
+        let result =
+            UserService::register_user(username.to_string(), password.to_string(), &mut conn).await;
 
         // 验证结果
         assert!(result.is_err(), "Duplicate username should fail");
         let error = result.err().unwrap();
-        assert!(matches!(error, Error::DieselError(_)), "Expected DieselError for duplicate username");
-         clear_users_table(&mut conn).await;
+        assert!(
+            matches!(error, Error::DieselError(_)),
+            "Expected DieselError for duplicate username"
+        );
+        clear_users_table(&mut conn).await;
     }
 
     #[tokio::test]
@@ -213,12 +251,16 @@ diesel::delete(users).execute(conn).await.expect("Failed to clear users table");
         let password = ""; //空密码会哈希失败
 
         // 调用注册方法
-        let result = UserService::register_user(username.to_string(), password.to_string(), &mut conn).await;
+        let result =
+            UserService::register_user(username.to_string(), password.to_string(), &mut conn).await;
 
         // 验证结果
         assert!(result.is_err(), "Password hashing failure should fail");
         let error = result.err().unwrap();
-        assert!(matches!(error, Error::PasswordHashingError(_)), "Expected PasswordHashingError");
-                clear_users_table(&mut conn).await;
+        assert!(
+            matches!(error, Error::PasswordHashingError(_)),
+            "Expected PasswordHashingError"
+        );
+        clear_users_table(&mut conn).await;
     }
 }

@@ -1,16 +1,16 @@
 //生成jsonwebtoken
-use jsonwebtoken::{encode, decode, Header, Validation, EncodingKey, DecodingKey, Algorithm};
-use chrono::{Utc, Duration};
 use crate::models::Error as AppError; // 确保你的 Error 枚举中有 JwtError, TokenExpired, InvalidToken
-use uuid::Uuid;
 use crate::types::config::JwtConfig; // 引入你的 JwtConfig
-use serde::{Serialize, Deserialize};
+use chrono::{Duration, Utc};
+use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AccessTokenClaims {
-    pub sub: Uuid, // users.user_id,use uuid as user identifier
-    pub exp: usize,  // Expiration time (timestamp),jwtconfig.access_token_ttl_seconds
-    pub iat: usize,  // Issued at (timestamp）
+    pub sub: Uuid,  // users.user_id,use uuid as user identifier
+    pub exp: usize, // Expiration time (timestamp),jwtconfig.access_token_ttl_seconds
+    pub iat: usize, // Issued at (timestamp）
 }
 
 pub fn generate_access_token(user_id: Uuid, jwt_config: &JwtConfig) -> Result<String, AppError> {
@@ -22,28 +22,39 @@ pub fn generate_access_token(user_id: Uuid, jwt_config: &JwtConfig) -> Result<St
         iat: now.timestamp() as usize,
     };
     //The default algorithm is HS256
-    encode(&Header::default(), &claims, &EncodingKey::from_secret(jwt_config.secret.as_ref()))
-        .map_err(|e| {
-            log::error!("Failed to generate access token: {}", e);
-            AppError::JwtError(e.to_string())
-        })
+    encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(jwt_config.secret.as_ref()),
+    )
+    .map_err(|e| {
+        log::error!("Failed to generate access token: {}", e);
+        AppError::JwtError(e.to_string())
+    })
 }
-pub fn validate_access_token(token: &str, jwt_config: &JwtConfig) -> Result<AccessTokenClaims, AppError> {
+pub fn validate_access_token(
+    token: &str,
+    jwt_config: &JwtConfig,
+) -> Result<AccessTokenClaims, AppError> {
     let mut validation = Validation::new(Algorithm::HS256); // 确保算法与生成时一致
     validation.validate_exp = true;
-     validation.leeway = 60; // 可选：允许60秒的 leeway，防止始终不对齐
-    decode::<AccessTokenClaims>(token, &DecodingKey::from_secret(jwt_config.secret.as_ref()), &validation)
-        .map(|data| data.claims)
-        .map_err(|e| match e.kind() {
-            jsonwebtoken::errors::ErrorKind::ExpiredSignature => {
-                log::debug!("Access token expired");
-                AppError::TokenExpired
-            }
-            _ => {
-                log::warn!("Invalid access token: {}", e);
-                AppError::InvalidToken
-            }
-        })
+    validation.leeway = 60; // 可选：允许60秒的 leeway，防止始终不对齐
+    decode::<AccessTokenClaims>(
+        token,
+        &DecodingKey::from_secret(jwt_config.secret.as_ref()),
+        &validation,
+    )
+    .map(|data| data.claims)
+    .map_err(|e| match e.kind() {
+        jsonwebtoken::errors::ErrorKind::ExpiredSignature => {
+            log::debug!("Access token expired");
+            AppError::TokenExpired
+        }
+        _ => {
+            log::warn!("Invalid access token: {}", e);
+            AppError::InvalidToken
+        }
+    })
 }
 #[cfg(test)]
 mod tests {
@@ -54,7 +65,7 @@ mod tests {
     fn test_generate_and_validate_token() {
         let jwt_config = JwtConfig {
             secret: "my_secret_key".to_string(),
-            access_token_ttl_seconds: 3600, // 1小时
+            access_token_ttl_seconds: 3600,   // 1小时
             refresh_token_ttl_seconds: 86400, // 1天
         };
 
@@ -63,7 +74,7 @@ mod tests {
 
         let claims = validate_access_token(&token, &jwt_config).expect("Failed to validate token");
         print!("\nGenerated Token: {}\n", token);
-        print!("claims:{:?}",claims);
+        print!("claims:{:?}", claims);
         assert_eq!(claims.sub, user_id);
         assert!(claims.exp > claims.iat); // 过期时间应该大于签发时间
     }

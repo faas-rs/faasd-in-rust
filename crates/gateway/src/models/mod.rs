@@ -1,25 +1,25 @@
-pub mod schema;
 pub mod db;
+pub mod schema;
 use chrono::NaiveDateTime;
 use diesel::prelude::*;
 // 确保 Insertable, Queryable, Selectable, Identifiable, AsChangeset 被导入
-use diesel::{Insertable, Queryable, Selectable, Identifiable, AsChangeset};
+use crate::models::schema::users; // 导入表定义
+use crate::models::schema::users::dsl::*;
+use diesel::{AsChangeset, Identifiable, Insertable, Queryable, Selectable};
 use diesel_async::pooled_connection::bb8::PooledConnection;
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
-use crate::models::schema::users; // 导入表定义
-use crate::models::schema::users::dsl::*; // 导入列名 uid, username 等
+use uuid::Uuid; // 导入列名 uid, username 等
 
 #[derive(Debug)]
 pub enum Error {
     DieselError(diesel::result::Error),
     NotFound,
-    Conflict, 
+    Conflict,
     PasswordHashingError(String),
 
-    JwtError(String), 
-    TokenExpired, 
+    JwtError(String),
+    TokenExpired,
     InvalidToken,
 }
 
@@ -37,7 +37,7 @@ impl From<diesel::result::Error> for Error {
 // --- User 结构体 ---
 #[derive(Queryable, Selectable, Identifiable, Debug, Serialize, Deserialize)]
 #[diesel(table_name = users)] // 使用导入的 users 表
-#[diesel(primary_key(uid))]    // 指定主键，用于 Identifiable
+#[diesel(primary_key(uid))] // 指定主键，用于 Identifiable
 pub struct User {
     pub uid: uuid::Uuid,
     pub username: String,
@@ -76,7 +76,8 @@ impl User {
         target_uid: Uuid,
         new_username_val: &str,
         conn: &mut PooledConnection<'_, AsyncPgConnection>,
-    ) -> Result<Self, Error> { // 返回更新后的 User
+    ) -> Result<Self, Error> {
+        // 返回更新后的 User
         // 1. 检查新用户名是否已被其他用户占用
         let new_username_taken = users
             .filter(username.eq(new_username_val))
@@ -87,9 +88,9 @@ impl User {
 
         match new_username_taken {
             Ok(count) if count > 0 => return Err(Error::Conflict), // 新用户名已被占用
-            Err(diesel::result::Error::NotFound) => {} // 正常，新用户名可用
-            Err(e) => return Err(Error::from(e)),    // 其他数据库错误
-            _ => {} // count is 0
+            Err(diesel::result::Error::NotFound) => {}             // 正常，新用户名可用
+            Err(e) => return Err(Error::from(e)),                  // 其他数据库错误
+            _ => {}                                                // count is 0
         }
 
         // 2. 执行更新
@@ -104,7 +105,8 @@ impl User {
     pub async fn delete_by_uuid(
         target_uid: Uuid,
         conn: &mut PooledConnection<'_, AsyncPgConnection>,
-    ) -> Result<usize, Error> { // 返回删除的行数
+    ) -> Result<usize, Error> {
+        // 返回删除的行数
         diesel::delete(users.find(target_uid))
             .execute(conn)
             .await
@@ -129,7 +131,8 @@ impl NewUser {
     pub async fn create(
         &self, // self 是 NewUser 的实例
         conn: &mut PooledConnection<'_, AsyncPgConnection>,
-    ) -> Result<User, Error> { // 返回创建的 User 记录
+    ) -> Result<User, Error> {
+        // 返回创建的 User 记录
         diesel::insert_into(users)
             .values(self) // NewUser 必须 derive(Insertable)
             .get_result(conn) // 将插入结果转换为 User 类型
