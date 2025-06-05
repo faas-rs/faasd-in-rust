@@ -1,16 +1,16 @@
+use crate::models::Error as AppError;
 use crate::oauth::jwt_utils::{AccessTokenClaims, generate_access_token, validate_access_token};
 use crate::oauth::services::{self, UserService};
-use crate::types::config::{FaaSConfig}; // 确保 JwtConfig 被正确导入
-use actix_web::error::ErrorUnauthorized;
+use crate::types::config::FaaSConfig; // 确保 JwtConfig 被正确导入
 use actix_web::HttpMessage;
+use actix_web::error::ErrorUnauthorized;
+use actix_web::{Error, dev::ServiceRequest};
 use actix_web::{FromRequest, HttpRequest, HttpResponse, dev::Payload, web};
 use actix_web_httpauth::extractors::bearer::BearerAuth;
 use diesel_async::AsyncPgConnection;
 use diesel_async::pooled_connection::bb8::Pool;
 use serde::{Deserialize, Serialize};
 use std::future::{Ready, ready}; // 用于认证错误// 确保导入 verify_password
-use actix_web::{dev::ServiceRequest, Error};
-use crate::models::Error as AppError; 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 //注册结构体
 pub struct RegisterPayload {
@@ -95,7 +95,7 @@ pub async fn protected_endpoint(
 ) -> Result<ServiceRequest, Error> {
     let token = credentials.token();
     let config = req.app_data::<web::Data<FaaSConfig>>().unwrap();
-    match validate_access_token(token,&config.jwt_config) {
+    match validate_access_token(token, &config.jwt_config) {
         Ok(claims) => {
             log::info!("Access granted to user with ID: {}", claims.sub);
             {
@@ -114,7 +114,9 @@ pub async fn protected_endpoint(
         }
         Err(_) => {
             log::error!("Unexpected error");
-            Err(actix_web::error::ErrorInternalServerError("Unexpected error"))
+            Err(actix_web::error::ErrorInternalServerError(
+                "Unexpected error",
+            ))
         }
     }
 }

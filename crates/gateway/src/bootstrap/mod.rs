@@ -5,7 +5,6 @@ use actix_web::{
 };
 use actix_web_httpauth::middleware::HttpAuthentication;
 
-use std::{collections::HashMap, sync::Arc};
 use crate::oauth::auth_handler::protected_endpoint;
 use crate::{
     handlers::{self, proxy::PROXY_DISPATCH_PATH},
@@ -16,6 +15,7 @@ use crate::{
 };
 use diesel_async::AsyncPgConnection;
 use diesel_async::pooled_connection::bb8::Pool;
+use std::{collections::HashMap, sync::Arc};
 
 pub fn config_app<P: Provider>(
     provider: Arc<P>,
@@ -43,9 +43,7 @@ pub fn config_app<P: Provider>(
             )
             .service(
                 web::scope("/system")
-                    .wrap(
-                       HttpAuthentication::bearer(protected_endpoint)
-                    )
+                    .wrap(HttpAuthentication::bearer(protected_endpoint))
                     .service(
                         web::resource("/functions")
                             .route(web::get().to(handlers::function::list::<P>))
