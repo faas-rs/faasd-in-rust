@@ -30,3 +30,4 @@ diesel = { version = "2.1.0", features = ["postgres","uuid","chrono","r2d2"] }
 diesel-async = { version = "0.5.2", features = ["postgres","bb8","pool"] }
 jsonwebtoken = "9.3.1"
 argon2 = "0.5.3"
+oauth2 ="5.0.0"

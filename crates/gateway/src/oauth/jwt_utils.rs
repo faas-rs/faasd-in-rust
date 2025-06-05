@@ -6,7 +6,7 @@ use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, deco
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize,Clone)]
 pub struct AccessTokenClaims {
     pub sub: Uuid,  // users.user_id,use uuid as user identifier
     pub exp: usize, // Expiration time (timestamp),jwtconfig.access_token_ttl_seconds

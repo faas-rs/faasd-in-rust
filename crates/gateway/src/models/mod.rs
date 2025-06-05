@@ -2,27 +2,70 @@ pub mod db;
 pub mod schema;
 use chrono::NaiveDateTime;
 use diesel::prelude::*;
+use std::fmt;
 // 确保 Insertable, Queryable, Selectable, Identifiable, AsChangeset 被导入
 use crate::models::schema::users; // 导入表定义
 use crate::models::schema::users::dsl::*;
+use actix_web::{HttpResponse, ResponseError};
 use diesel::{AsChangeset, Identifiable, Insertable, Queryable, Selectable};
 use diesel_async::pooled_connection::bb8::PooledConnection;
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid; // 导入列名 uid, username 等
-
 #[derive(Debug)]
 pub enum Error {
     DieselError(diesel::result::Error),
     NotFound,
     Conflict,
     PasswordHashingError(String),
-
     JwtError(String),
     TokenExpired,
     InvalidToken,
 }
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Error::DieselError(e) => write!(f, "Diesel error: {}", e),
+            Error::NotFound => write!(f, "Resource not found"),
+            Error::Conflict => write!(f, "Conflict error"),
+            Error::PasswordHashingError(e) => write!(f, "Password hashing error: {}", e),
+            Error::JwtError(e) => write!(f, "JWT error: {}", e),
+            Error::TokenExpired => write!(f, "Token expired"),
+            Error::InvalidToken => write!(f, "Invalid token"),
+        }
+    }
+}
+impl std::error::Error for Error {}
 
+impl ResponseError for Error {
+    fn error_response(&self) -> HttpResponse {
+        match self {
+            Error::NotFound => {
+                HttpResponse::NotFound().json(serde_json::json!({"error": "Resource not found"}))
+            }
+            Error::Conflict => {
+                HttpResponse::Conflict().json(serde_json::json!({"error": "Conflict error"}))
+            }
+            Error::PasswordHashingError(e) => {
+                HttpResponse::InternalServerError().json(serde_json::json!({"error": e}))
+            }
+            Error::JwtError(e) => {
+                HttpResponse::InternalServerError().json(serde_json::json!({"error": e}))
+            }
+            Error::TokenExpired => {
+                HttpResponse::Unauthorized().json(serde_json::json!({"error": "Token expired"}))
+            }
+            Error::InvalidToken => {
+                HttpResponse::Unauthorized().json(serde_json::json!({"error": "Invalid token"}))
+            }
+            Error::DieselError(e) => {
+                log::error!("Diesel error: {}", e);
+                HttpResponse::InternalServerError()
+                    .json(serde_json::json!({"error": "Database error"}))
+            }
+        }
+    }
+}
 impl From<diesel::result::Error> for Error {
     fn from(err: diesel::result::Error) -> Self {
         match err {

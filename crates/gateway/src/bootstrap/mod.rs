@@ -3,19 +3,26 @@ use actix_web::{
     dev::Server,
     web::{self, ServiceConfig},
 };
+use actix_web_httpauth::middleware::HttpAuthentication;
 
 use std::{collections::HashMap, sync::Arc};
-
+use crate::oauth::auth_handler::protected_endpoint;
 use crate::{
     handlers::{self, proxy::PROXY_DISPATCH_PATH},
-    // metrics::HttpMetrics,
+    models::db,
+    oauth::auth_handler,
     provider::Provider,
     types::config::FaaSConfig,
 };
+use diesel_async::AsyncPgConnection;
+use diesel_async::pooled_connection::bb8::Pool;
 
-pub fn config_app<P: Provider>(provider: Arc<P>) -> impl FnOnce(&mut ServiceConfig) {
+pub fn config_app<P: Provider>(
+    provider: Arc<P>,
+    db_pool: Pool<AsyncPgConnection>,
+    faas_config: FaaSConfig,
+) -> impl FnOnce(&mut ServiceConfig) {
     // let _registry = Registry::new();
-
     let provider = web::Data::from(provider);
     let app_state = web::Data::new(AppState {
         // metrics: HttpMetrics::new(),
@@ -24,8 +31,21 @@ pub fn config_app<P: Provider>(provider: Arc<P>) -> impl FnOnce(&mut ServiceConf
     move |cfg: &mut ServiceConfig| {
         cfg.app_data(app_state)
             .app_data(provider)
+            .app_data(web::Data::new(db_pool.clone()))
+            .app_data(web::Data::new(faas_config.clone()))
+            .service(
+                web::scope("/auth")
+                    .route(
+                        "/register",
+                        web::post().to(auth_handler::register_user_handler),
+                    )
+                    .route("/login", web::post().to(auth_handler::login_handler)),
+            )
             .service(
                 web::scope("/system")
+                    .wrap(
+                       HttpAuthentication::bearer(protected_endpoint)
+                    )
                     .service(
                         web::resource("/functions")
                             .route(web::get().to(handlers::function::list::<P>))
@@ -84,17 +104,20 @@ struct AppState {
 }
 
 // this is a blocking serve function
-pub fn serve<P: Provider>(provider: Arc<P>) -> std::io::Result<Server> {
+pub async fn serve<P: Provider>(provider: Arc<P>) -> std::io::Result<Server> {
     log::info!("Checking config file");
     let config = FaaSConfig::new();
     let port = config.tcp_port.unwrap_or(8080);
-
-    // 如果启用了Basic Auth，从指定路径读取认证凭证并存储在应用程序状态中
-    // TODO: Authentication Logic
-
-    let server = HttpServer::new(move || App::new().configure(config_app(provider.clone())))
-        .bind(("0.0.0.0", port))?
-        .run();
+    let db_pool = db::create_pool("postgres://dragonos:vitus@localhost/faasd_rs_db").await;
+    let server = HttpServer::new(move || {
+        App::new().configure(config_app(
+            provider.clone(),
+            db_pool.clone(),
+            config.clone(),
+        ))
+    })
+    .bind(("0.0.0.0", port))?
+    .run();
 
     Ok(server)
 }
