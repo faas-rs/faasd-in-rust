@@ -83,7 +83,9 @@ pub fn config_app<P: Provider>(
                 //         ),
                 // )
             )
-            .service(web::scope("/function").service(
+            .service(web::scope("/function")
+            .wrap(HttpAuthentication::bearer(protected_endpoint))
+            .service(
                 web::resource(PROXY_DISPATCH_PATH).route(web::to(handlers::proxy::proxy::<P>)),
             ));
         // .route("/metrics", web::get().to(handlers::telemetry))
