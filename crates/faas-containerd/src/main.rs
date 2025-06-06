@@ -28,6 +28,7 @@ async fn main() -> std::io::Result<()> {
     });
 
     gateway::bootstrap::serve(provider)
+        .await
         .unwrap_or_else(|e| {
             log::error!("Failed to start server: {}", e);
             std::process::exit(1);
