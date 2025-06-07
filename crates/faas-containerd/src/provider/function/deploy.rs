@@ -24,25 +24,6 @@ impl ContainerdProvider {
             })?;
         log::trace!("Image '{}' fetch ok", &metadata.image);
 
-        let mounts = backend().prepare_snapshot(&metadata).await.map_err(|e| {
-            log::error!("Failed to prepare snapshot: {:?}", e);
-            DeployError::InternalError(e.to_string())
-        })?;
-
-        let snapshot_defer = scopeguard::guard((), |()| {
-            log::trace!("Cleaning up snapshot");
-            let endpoint = metadata.endpoint.clone();
-            tokio::spawn(async move { backend().remove_snapshot(&endpoint).await });
-        });
-
-        // let network = CNIEndpoint::new(&metadata.container_id, &metadata.namespace)?;
-        let (ip, netns) = cni::cni_impl::create_cni_network(&metadata.endpoint).map_err(|e| {
-            log::error!("Failed to create CNI network: {}", e);
-            DeployError::InternalError(e.to_string())
-        })?;
-
-        let netns_defer = guard(netns, |ns| ns.remove().unwrap());
-
         let _ = backend().create_container(&metadata).await.map_err(|e| {
             log::error!("Failed to create container: {:?}", e);
             DeployError::InternalError(e.to_string())
@@ -53,8 +34,26 @@ impl ContainerdProvider {
             tokio::spawn(async move { backend().delete_container(&endpoint).await });
         });
 
+        // let network = CNIEndpoint::new(&metadata.container_id, &metadata.namespace)?;
+        let (ip, netns) = cni::cni_impl::create_cni_network(&metadata.endpoint).map_err(|e| {
+            log::error!("Failed to create CNI network: {}", e);
+            DeployError::InternalError(e.to_string())
+        })?;
+
+        let netns_defer = guard(netns, |ns| ns.remove().unwrap());
+
         // TODO: Use ostree-ext
         // let img_conf = BACKEND.get().unwrap().get_runtime_config(&metadata.image).unwrap();
+        let mounts = backend().prepare_snapshot(&metadata).await.map_err(|e| {
+            log::error!("Failed to prepare snapshot: {:?}", e);
+            DeployError::InternalError(e.to_string())
+        })?;
+
+        let snapshot_defer = scopeguard::guard((), |()| {
+            log::trace!("Cleaning up snapshot");
+            let endpoint = metadata.endpoint.clone();
+            tokio::spawn(async move { backend().remove_snapshot(&endpoint).await });
+        });
 
         backend().new_task(mounts, &metadata.endpoint).await?;
 
