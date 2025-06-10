@@ -1,10 +1,3 @@
-use actix_web::{
-    App, HttpServer,
-    dev::Server,
-    web::{self, ServiceConfig},
-};
-use actix_web_httpauth::middleware::HttpAuthentication;
-
 use crate::oauth::auth_handler::protected_endpoint;
 use crate::{
     handlers::{self, proxy::PROXY_DISPATCH_PATH},
@@ -13,8 +6,15 @@ use crate::{
     provider::Provider,
     types::config::FaaSConfig,
 };
+use actix_web::{
+    App, HttpServer,
+    dev::Server,
+    web::{self, ServiceConfig},
+};
+use actix_web_httpauth::middleware::HttpAuthentication;
 use diesel_async::AsyncPgConnection;
 use diesel_async::pooled_connection::bb8::Pool;
+use std::env;
 use std::{collections::HashMap, sync::Arc};
 
 pub fn config_app<P: Provider>(
@@ -83,9 +83,14 @@ pub fn config_app<P: Provider>(
                 //         ),
                 // )
             )
-            .service(web::scope("/function").service(
-                web::resource(PROXY_DISPATCH_PATH).route(web::to(handlers::proxy::proxy::<P>)),
-            ));
+            .service(
+                web::scope("/function")
+                    .wrap(HttpAuthentication::bearer(protected_endpoint))
+                    .service(
+                        web::resource(PROXY_DISPATCH_PATH)
+                            .route(web::to(handlers::proxy::proxy::<P>)),
+                    ),
+            );
         // .route("/metrics", web::get().to(handlers::telemetry))
         // .route("/healthz", web::get().to(handlers::health));
     }
@@ -106,7 +111,9 @@ pub async fn serve<P: Provider>(provider: Arc<P>) -> std::io::Result<Server> {
     log::info!("Checking config file");
     let config = FaaSConfig::new();
     let port = config.tcp_port.unwrap_or(8080);
-    let db_pool = db::create_pool("postgres://dragonos:vitus@localhost/faasd_rs_db").await;
+    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    let db_pool = db::create_pool(&database_url).await?;
+    // let pool = setup_test_db().await.expect("failed to set up test");
     let server = HttpServer::new(move || {
         App::new().configure(config_app(
             provider.clone(),

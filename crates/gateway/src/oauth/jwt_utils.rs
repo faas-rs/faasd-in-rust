@@ -1,5 +1,5 @@
 //生成jsonwebtoken
-use crate::models::Error as AppError; // 确保你的 Error 枚举中有 JwtError, TokenExpired, InvalidToken
+use crate::oauth::error::AuthError;
 use crate::types::config::JwtConfig; // 引入你的 JwtConfig
 use chrono::{Duration, Utc};
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
@@ -13,7 +13,7 @@ pub struct AccessTokenClaims {
     pub iat: usize, // Issued at (timestamp）
 }
 
-pub fn generate_access_token(user_id: Uuid, jwt_config: &JwtConfig) -> Result<String, AppError> {
+pub fn generate_access_token(user_id: Uuid, jwt_config: &JwtConfig) -> Result<String, AuthError> {
     let now = Utc::now();
     let expiration = now + Duration::seconds(jwt_config.access_token_ttl_seconds);
     let claims = AccessTokenClaims {
@@ -29,13 +29,13 @@ pub fn generate_access_token(user_id: Uuid, jwt_config: &JwtConfig) -> Result<St
     )
     .map_err(|e| {
         log::error!("Failed to generate access token: {}", e);
-        AppError::JwtError(e.to_string())
+        AuthError::JwtError(e.to_string())
     })
 }
 pub fn validate_access_token(
     token: &str,
     jwt_config: &JwtConfig,
-) -> Result<AccessTokenClaims, AppError> {
+) -> Result<AccessTokenClaims, AuthError> {
     let mut validation = Validation::new(Algorithm::HS256); // 确保算法与生成时一致
     validation.validate_exp = true;
     validation.leeway = 60; // 可选：允许60秒的 leeway，防止始终不对齐
@@ -48,11 +48,11 @@ pub fn validate_access_token(
     .map_err(|e| match e.kind() {
         jsonwebtoken::errors::ErrorKind::ExpiredSignature => {
             log::debug!("Access token expired");
-            AppError::TokenExpired
+            AuthError::TokenExpired
         }
         _ => {
             log::warn!("Invalid access token: {}", e);
-            AppError::InvalidToken
+            AuthError::InvalidToken
         }
     })
 }
@@ -91,7 +91,7 @@ mod tests {
         let token = generate_access_token(user_id, &jwt_config).expect("Failed to generate token");
 
         let result = validate_access_token(&token, &jwt_config);
-        assert!(matches!(result, Err(AppError::TokenExpired)));
+        assert!(matches!(result, Err(AuthError::TokenExpired)));
     }
 
     #[test]
@@ -104,6 +104,6 @@ mod tests {
 
         let invalid_token = "invalid.token.string";
         let result = validate_access_token(invalid_token, &jwt_config);
-        assert!(matches!(result, Err(AppError::InvalidToken)));
+        assert!(matches!(result, Err(AuthError::InvalidToken)));
     }
 }

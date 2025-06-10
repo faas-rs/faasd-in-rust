@@ -6,4 +6,4 @@ file = "./crates/gateway/src/models/schema.rs"
 custom_type_derives = ["diesel::query_builder::QueryId", "Clone"]
 
 [migrations_directory]
-dir = "/home/dragonos/Work/faasd-in-rust/migrations"
+dir = "./migrations"
