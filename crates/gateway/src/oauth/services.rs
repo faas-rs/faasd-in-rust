@@ -161,122 +161,125 @@ impl UserService {
         User::update_username_by_uid(input_uid, new_username, conn).await
     }
 }
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//     use crate::models::schema::users::dsl::users; // 导入表定义
-//     use crate::models::*;
-//     use diesel_async::pooled_connection::bb8::{Pool, PooledConnection};
-//     use diesel_async::{AsyncPgConnection, RunQueryDsl};
-//     use std::env;
-//     async fn setup_test_db() -> Result<Pool<AsyncPgConnection>, DbError> {
-//         let database_url = env::var("TEST_DATABASE_URL").unwrap_or_else(|_| {
-//             "postgres://dragonos:vitus@localhost/diesel_demo_db_dragonos".to_string()
-//         });
-//         let pool = db::create_pool(&database_url).await?;
-//         Ok(pool)
-//     }
-//     async fn clear_users_table(conn: &mut PooledConnection<'_, AsyncPgConnection>) {
-//         diesel::delete(users)
-//             .execute(conn)
-//             .await
-//             .expect("Failed to clear users table");
-//     }
-//     #[tokio::test]
-//     async fn test_register_user_success() {
-//         let pool = setup_test_db().await.expect("failed to set up test"); // 这里能用 ?
-//         let mut conn = pool
-//             .get()
-//             .await
-//             .map_err(|e| DbError::PoolError(e.to_string()))
-//             .expect("fialed to get connection");
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::schema::users::dsl::users; // 导入表定义
+    use crate::models::*;
+    use diesel_async::pooled_connection::bb8::{Pool, PooledConnection};
+    use diesel_async::{AsyncPgConnection, RunQueryDsl};
+    use std::env;
+    async fn setup_test_db() -> Result<Pool<AsyncPgConnection>, DbError> {
+        let database_url = env::var("TEST_DATABASE_URL").unwrap_or_else(|_| {
+            "postgres://dragonos:vitus@localhost/diesel_demo_db_dragonos".to_string()
+        });
+        let pool = db::create_pool(&database_url).await?;
+        Ok(pool)
+    }
+    async fn clear_users_table(conn: &mut PooledConnection<'_, AsyncPgConnection>) {
+        diesel::delete(users)
+            .execute(conn)
+            .await
+            .expect("Failed to clear users table");
+    }
+    #[tokio::test]
+    #[ignore] // 忽略此测试，因为它依赖于数据库
+    async fn test_register_user_success() {
+        let pool = setup_test_db().await.expect("failed to set up test"); // 这里能用 ?
+        let mut conn = pool
+            .get()
+            .await
+            .map_err(|e| DbError::PoolError(e.to_string()))
+            .expect("fialed to get connection");
 
-//         // 清理测试数据
-//         clear_users_table(&mut conn).await;
+        // 清理测试数据
+        clear_users_table(&mut conn).await;
 
-//         let username = "test_user";
-//         let password = "test_password";
+        let username = "test_user";
+        let password = "test_password";
 
-//         // 调用注册方法
-//         let result =
-//             UserService::register_user(username.to_string(), password.to_string(), &mut conn).await;
+        // 调用注册方法
+        let result =
+            UserService::register_user(username.to_string(), password.to_string(), &mut conn).await;
 
-//         // 验证结果
-//         assert!(result.is_ok(), "User registration failed");
-//         let user = result.unwrap();
-//         assert_eq!(user.username, username, "Username mismatch");
-//         assert!(
-//             !user.password_hash.is_empty(),
-//             "Password hash should not be empty"
-//         );
+        // 验证结果
+        assert!(result.is_ok(), "User registration failed");
+        let user = result.unwrap();
+        assert_eq!(user.username, username, "Username mismatch");
+        assert!(
+            !user.password_hash.is_empty(),
+            "Password hash should not be empty"
+        );
 
-//         // 验证数据库中是否插入了用户
-//         let db_user = UserService::find_user_by_username(username, &mut conn)
-//             .await
-//             .expect("Failed to query user");
-//         assert_eq!(db_user.uid, user.uid, "UID mismatch");
-//         assert_eq!(db_user.username, user.username, "Username mismatch");
-//         clear_users_table(&mut conn).await;
-//     }
+        // 验证数据库中是否插入了用户
+        let db_user = UserService::find_user_by_username(username, &mut conn)
+            .await
+            .expect("Failed to query user");
+        assert_eq!(db_user.uid, user.uid, "UID mismatch");
+        assert_eq!(db_user.username, user.username, "Username mismatch");
+        clear_users_table(&mut conn).await;
+    }
 
-//     #[tokio::test]
-//     async fn test_register_user_duplicate_username() {
-//         let pool = setup_test_db().await.expect("failed to set up test");
-//         let mut conn = pool
-//             .get()
-//             .await
-//             .map_err(|e| DbError::PoolError(e.to_string()))
-//             .expect("fialed to get connection");
+    #[tokio::test]
+    #[ignore]
+    async fn test_register_user_duplicate_username() {
+        let pool = setup_test_db().await.expect("failed to set up test");
+        let mut conn = pool
+            .get()
+            .await
+            .map_err(|e| DbError::PoolError(e.to_string()))
+            .expect("fialed to get connection");
 
-//         // 清理测试数据
-//         clear_users_table(&mut conn).await;
+        // 清理测试数据
+        clear_users_table(&mut conn).await;
 
-//         let username = "duplicate_user";
-//         let password = "test_password";
+        let username = "duplicate_user";
+        let password = "test_password";
 
-//         // 第一次注册
-//         let _ =
-//             UserService::register_user(username.to_string(), password.to_string(), &mut conn).await;
+        // 第一次注册
+        let _ =
+            UserService::register_user(username.to_string(), password.to_string(), &mut conn).await;
 
-//         // 第二次注册，应该失败
-//         let result =
-//             UserService::register_user(username.to_string(), password.to_string(), &mut conn).await;
+        // 第二次注册，应该失败
+        let result =
+            UserService::register_user(username.to_string(), password.to_string(), &mut conn).await;
 
-//         // 验证结果
-//         assert!(result.is_err(), "Duplicate username should fail");
-//         // let error = result.err().unwrap();
-//         // assert!(
-//         //     matches!(error, AuthError::AlreadyExists(_)),
-//         //     "Expected AuthError for duplicate username"
-//         // );
-//         // clear_users_table(&mut conn).await;
-//     }
+        // 验证结果
+        assert!(result.is_err(), "Duplicate username should fail");
+        // let error = result.err().unwrap();
+        // assert!(
+        //     matches!(error, AuthError::AlreadyExists(_)),
+        //     "Expected AuthError for duplicate username"
+        // );
+        // clear_users_table(&mut conn).await;
+    }
 
-//     #[tokio::test]
-//     async fn test_register_user_password_hash_failure() {
-//         let pool = setup_test_db().await.expect("failed to set up test");
-//         let mut conn = pool
-//             .get()
-//             .await
-//             .map_err(|e| DbError::PoolError(e.to_string()))
-//             .expect("fialed to get connection");
-//         // 清理测试数据
-//         clear_users_table(&mut conn).await;
+    #[tokio::test]
+    #[ignore]
+    async fn test_register_user_password_hash_failure() {
+        let pool = setup_test_db().await.expect("failed to set up test");
+        let mut conn = pool
+            .get()
+            .await
+            .map_err(|e| DbError::PoolError(e.to_string()))
+            .expect("fialed to get connection");
+        // 清理测试数据
+        clear_users_table(&mut conn).await;
 
-//         let username = "hash_failure_user";
-//         let password = ""; //空密码会哈希失败
+        let username = "hash_failure_user";
+        let password = ""; //空密码会哈希失败
 
-//         // 调用注册方法
-//         let result =
-//             UserService::register_user(username.to_string(), password.to_string(), &mut conn).await;
+        // 调用注册方法
+        let result =
+            UserService::register_user(username.to_string(), password.to_string(), &mut conn).await;
 
-//         // 验证结果
-//         assert!(result.is_err(), "Password hashing failure should fail");
-//         let error = result.err().unwrap();
-//         assert!(
-//             matches!(error, AuthError::PasswordHashingError(_)),
-//             "Expected PasswordHashingError"
-//         );
-//         clear_users_table(&mut conn).await;
-//     }
-// }
+        // 验证结果
+        assert!(result.is_err(), "Password hashing failure should fail");
+        let error = result.err().unwrap();
+        assert!(
+            matches!(error, AuthError::PasswordHashingError(_)),
+            "Expected PasswordHashingError"
+        );
+        clear_users_table(&mut conn).await;
+    }
+}
