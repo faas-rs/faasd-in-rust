@@ -32,11 +32,22 @@ CREATE DATABASE faasd_rs_db OWNER dragonos;
 CREATE DATABASE diesel_demo_db_dragonos OWNER dragonos;
 \q
 ```
-
 ### 3. 安装 Diesel CLI
 
+在`flake.nix`中添加包：
 ```bash
-cargo install diesel_cli --no-default-features --features postgres
+ devShells.default = craneLib.devShell {
+    checks = self.checks.${system};
+
+    inputsFrom = [ faas-rs-crate ];
+
+    packages = [
+    pkgs.cargo-hakari
+    pkgs.containerd
+    pkgs.runc
+    pkgs.diesel-cli //这里
+    ];
+};
 ```
 
 ### 4. 配置环境变量
@@ -56,7 +67,7 @@ JWT_SECRET="HelloRust"
 # 在项目根目录执行
 export DATABASE_URL=postgres://dragonos:dragonos@localhost/faasd_rs_db
 diesel migration run 
-export DATABASE_URL=postgres://dragonos:dragonos@localhost/diesel_demo_db_dragonos
+export TEST_DATABASE_URL=postgres://dragonos:dragonos@localhost/diesel_demo_db_dragonos
 diesel migration run 
 
 ```

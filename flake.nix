@@ -147,6 +147,7 @@
             pkgs.cargo-hakari
             pkgs.containerd
             pkgs.runc
+            pkgs.diesel-cli
           ];
         };
       }
