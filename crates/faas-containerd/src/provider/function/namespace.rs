@@ -3,7 +3,10 @@ use std::collections::HashMap;
 use gateway::{handlers::namespace::NamespaceError, types::namespace::Namespace};
 
 use crate::{
-    impls::{backend, namespace::NamespaceServiceError},
+    impls::{
+        backend,
+        namespace::{NamespaceServiceError, get_namespace_without_uuid},
+    },
     provider::ContainerdProvider,
 };
 
@@ -19,7 +22,7 @@ impl ContainerdProvider {
             .map_err(|e| match e {
                 NamespaceServiceError::AlreadyExists => NamespaceError::AlreadyExists(format!(
                     "namespace {} has been existed",
-                    namespace
+                    get_namespace_without_uuid(&namespace)
                 )),
                 _ => NamespaceError::Internal(e.to_string()),
             })
@@ -36,12 +39,13 @@ impl ContainerdProvider {
         if exist.is_none() {
             return Err(NamespaceError::NotFound(format!(
                 "namespace {} not found",
-                namespace
+                get_namespace_without_uuid(&namespace)
             )));
         }
         let ns = exist.unwrap();
+        let name = get_namespace_without_uuid(&ns.name);
         Ok(Namespace {
-            name: Some(ns.name),
+            name: Some(name),
             labels: ns.labels,
         })
     }
@@ -53,8 +57,9 @@ impl ContainerdProvider {
             .map_err(|e| NamespaceError::Internal(e.to_string()))?;
         let mut ns_list_result = Vec::new();
         for ns in ns_list {
+            let name = get_namespace_without_uuid(&ns.name);
             ns_list_result.push(Namespace {
-                name: Some(ns.name),
+                name: Some(name),
                 labels: ns.labels,
             });
         }
@@ -66,9 +71,10 @@ impl ContainerdProvider {
             .delete_namespace(&namespace)
             .await
             .map_err(|e| match e {
-                NamespaceServiceError::NotFound => {
-                    NamespaceError::NotFound(format!("namespace {} not found", namespace))
-                }
+                NamespaceServiceError::NotFound => NamespaceError::NotFound(format!(
+                    "namespace {} not found",
+                    get_namespace_without_uuid(&namespace)
+                )),
                 _ => NamespaceError::Internal(e.to_string()),
             })
     }
@@ -82,9 +88,10 @@ impl ContainerdProvider {
             .update_namespace(&namespace, labels)
             .await
             .map_err(|e| match e {
-                NamespaceServiceError::NotFound => {
-                    NamespaceError::NotFound(format!("namespace {} not found", namespace))
-                }
+                NamespaceServiceError::NotFound => NamespaceError::NotFound(format!(
+                    "namespace {} not found",
+                    get_namespace_without_uuid(&namespace)
+                )),
                 _ => NamespaceError::Internal(e.to_string()),
             })
     }

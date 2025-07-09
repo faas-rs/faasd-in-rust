@@ -31,11 +31,22 @@ impl std::fmt::Display for Endpoint {
 
 impl From<Query> for Endpoint {
     fn from(query: Query) -> Self {
-        Self {
-            service: query.service,
-            namespace: query
+        let uuid = query.uuid.clone();
+        let namespace = match uuid {
+            Some(uuid) => format!(
+                "{}-{}",
+                uuid,
+                query
+                    .namespace
+                    .unwrap_or(consts::DEFAULT_FUNCTION_NAMESPACE.to_string())
+            ),
+            None => query
                 .namespace
                 .unwrap_or(consts::DEFAULT_FUNCTION_NAMESPACE.to_string()),
+        };
+        Self {
+            service: query.service,
+            namespace,
         }
     }
 }

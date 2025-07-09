@@ -1,6 +1,6 @@
-use crate::{provider::Provider, types::namespace::Namespace};
+use crate::{oauth::jwt_utils::AccessTokenClaims, provider::Provider, types::namespace::Namespace};
 use actix_http::{Method, StatusCode};
-use actix_web::{HttpRequest, HttpResponse, ResponseError, web};
+use actix_web::{HttpMessage, HttpRequest, HttpResponse, ResponseError, web};
 use derive_more::Display;
 
 #[derive(Debug, Display)]
@@ -38,7 +38,10 @@ pub async fn mut_namespace<P: Provider>(
     if namespace.is_none() {
         return Err(NamespaceError::Invalid("namespace is required".to_string()));
     }
+    let claims = req.extensions().get::<AccessTokenClaims>().unwrap().clone();
+    let uuid = claims.sub.clone().to_string();
     let namespace = namespace.unwrap();
+    let ns = format!("{}-{}", uuid, namespace);
     let labels;
     match *req.method() {
         Method::POST => {
@@ -53,20 +56,17 @@ pub async fn mut_namespace<P: Provider>(
                 }
             }
             (*provider)
-                .create_namespace(namespace.to_string(), labels)
+                .create_namespace(ns.clone(), labels)
                 .await
                 .map(|_| {
                     HttpResponse::Created()
                         .body(format!("namespace {} was created successfully", namespace))
                 })
         }
-        Method::DELETE => (*provider)
-            .delete_namespace(namespace.to_string())
-            .await
-            .map(|_| {
-                HttpResponse::Accepted()
-                    .body(format!("namespace {} was deleted successfully", namespace))
-            }),
+        Method::DELETE => (*provider).delete_namespace(ns.clone()).await.map(|_| {
+            HttpResponse::Accepted()
+                .body(format!("namespace {} was deleted successfully", namespace))
+        }),
         Method::PUT => {
             match info {
                 Some(info) => {
@@ -79,7 +79,7 @@ pub async fn mut_namespace<P: Provider>(
                 }
             }
             (*provider)
-                .update_namespace(namespace.to_string(), labels)
+                .update_namespace(ns.clone(), labels)
                 .await
                 .map(|_| {
                     HttpResponse::Accepted()
@@ -87,7 +87,7 @@ pub async fn mut_namespace<P: Provider>(
                 })
         }
         Method::GET => (*provider)
-            .get_namespace(namespace.to_string())
+            .get_namespace(ns.clone())
             .await
             .map(|ns| HttpResponse::Ok().json(ns)),
         _ => Err(NamespaceError::MethodNotAllowed(

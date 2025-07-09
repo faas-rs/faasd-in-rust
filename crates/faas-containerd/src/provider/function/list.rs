@@ -1,7 +1,7 @@
 use gateway::{handlers::function::ListError, types::function::Status};
 
 use crate::{
-    impls::{backend, cni::Endpoint, task::TaskError},
+    impls::{backend, cni::Endpoint, namespace::get_namespace_without_uuid, task::TaskError},
     provider::ContainerdProvider,
 };
 
@@ -41,10 +41,11 @@ impl ContainerdProvider {
                 }
             }
 
+            let namespace = get_namespace_without_uuid(&endpoint.namespace);
             // 大部分字段并未实现，使用None填充
             let status = Status {
                 name: endpoint.service,
-                namespace: Some(endpoint.namespace),
+                namespace: Some(namespace),
                 image: container.image,
                 env_process: None,
                 env_vars: None,
