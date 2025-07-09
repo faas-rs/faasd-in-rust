@@ -3,6 +3,7 @@ use actix_web::http::StatusCode;
 use actix_web::test;
 use faas_containerd::consts::DEFAULT_FAASDRS_DATA_DIR;
 use gateway::bootstrap::config_app;
+use gateway::types::config::FaaSConfig;
 use serde_json::json;
 
 #[actix_web::test]
@@ -10,11 +11,18 @@ use serde_json::json;
 async fn test_handlers_in_order() {
     dotenv::dotenv().ok();
     faas_containerd::init_backend().await;
+    let test_database_url = std::env::var("TEST_DATABASE_URL").unwrap_or_else(|_| {
+        "postgres://dragonos:vitus@localhost/diesel_demo_db_dragonos".to_string()
+    });
+    let db_pool = gateway::models::db::create_pool(&test_database_url)
+        .await
+        .expect("Failed to create database pool");
+    let config = FaaSConfig::new();
     let provider = faas_containerd::provider::ContainerdProvider::new(DEFAULT_FAASDRS_DATA_DIR);
-    let app = test::init_service(App::new().configure(config_app(provider))).await;
+    let app = test::init_service(App::new().configure(config_app(provider, db_pool, config))).await;
 
     // test proxy no-found-function in namespace 'faasrs-test-namespace'
-    let req = test::TestRequest::get()
+    let req: actix_http::Request = test::TestRequest::get()
         .uri("/function/test-no-found-function")
         .to_request();
     let resp = test::call_service(&app, req).await;

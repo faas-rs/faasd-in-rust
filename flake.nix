@@ -38,6 +38,7 @@
             openssl
             protobuf
             pkg-config
+            pkgs.postgresql
           ];
 
           nativeBuildInputs = with pkgs; [
@@ -146,6 +147,7 @@
             pkgs.cargo-hakari
             pkgs.containerd
             pkgs.runc
+            pkgs.diesel-cli
           ];
         };
       }
