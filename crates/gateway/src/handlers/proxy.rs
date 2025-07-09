@@ -1,9 +1,12 @@
 use std::str::FromStr;
 
 use actix_http::Method;
-use actix_web::{HttpRequest, HttpResponse, error::ErrorMethodNotAllowed, web};
+use actix_web::{HttpMessage, HttpRequest, HttpResponse, error::ErrorMethodNotAllowed, web};
 
-use crate::{provider::Provider, proxy::proxy_handler::proxy_request, types::function::Query};
+use crate::{
+    oauth::jwt_utils::AccessTokenClaims, provider::Provider, proxy::proxy_handler::proxy_request,
+    types::function::Query,
+};
 
 pub const PROXY_DISPATCH_PATH: &str = "/{any:.+}";
 
@@ -28,7 +31,11 @@ impl FromStr for ProxyQuery {
             .map(|(s, n)| (s.to_string(), Some(n.to_string())))
             .unwrap_or((identifier.to_string(), None));
         Ok(ProxyQuery {
-            query: Query { service, namespace },
+            query: Query {
+                service,
+                namespace,
+                uuid: None,
+            },
             path: rest_path,
         })
     }
@@ -41,10 +48,13 @@ pub async fn proxy<P: Provider>(
     provider: web::Data<P>,
     any: web::Path<String>,
 ) -> actix_web::Result<HttpResponse> {
-    let meta = ProxyQuery::from_str(&any).map_err(|_| {
+    let mut meta = ProxyQuery::from_str(&any).map_err(|_| {
         log::error!("Failed to parse path: {}", any);
         ErrorMethodNotAllowed("Invalid path")
     })?;
+    let claims = req.extensions().get::<AccessTokenClaims>().unwrap().clone();
+    let uuid = claims.sub.clone().to_string();
+    meta.query.uuid = Some(uuid);
     let function = meta.query;
     log::trace!("proxy query: {:?}", function);
     match *req.method() {

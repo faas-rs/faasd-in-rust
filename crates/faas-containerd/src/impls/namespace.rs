@@ -142,3 +142,7 @@ impl ContainerdService {
         Ok(())
     }
 }
+
+pub fn get_namespace_without_uuid(namespace: &str) -> String {
+    namespace.split('-').next_back().unwrap().to_string()
+}

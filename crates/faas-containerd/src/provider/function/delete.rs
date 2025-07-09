@@ -6,7 +6,7 @@ use gateway::types::function::Query;
 
 impl ContainerdProvider {
     pub(crate) async fn _delete(&self, function: Query) -> Result<(), DeleteError> {
-        let endpoint: Endpoint = function.into();
+        let endpoint: Endpoint = Endpoint::from(function);
         log::trace!("Deleting function: {:?}", endpoint);
 
         backend().kill_task_with_timeout(&endpoint).await?;

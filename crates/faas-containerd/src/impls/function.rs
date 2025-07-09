@@ -12,26 +12,30 @@ pub struct ContainerStaticMetadata {
 
 impl From<function::Deployment> for ContainerStaticMetadata {
     fn from(info: function::Deployment) -> Self {
+        let ns = info.namespace.unwrap();
+        let ns_parts = ns.rsplit_once('-');
+        let (uuid, actual_ns) = ns_parts
+            .map(|(uuid, ns)| {
+                if ns.is_empty() {
+                    (uuid, None)
+                } else {
+                    (uuid, Some(ns))
+                }
+            })
+            .unwrap();
         ContainerStaticMetadata {
             image: info.image,
             endpoint: Endpoint::new(
                 &info.service,
-                &info
-                    .namespace
-                    .unwrap_or(consts::DEFAULT_FUNCTION_NAMESPACE.to_string()),
+                &format!(
+                    "{}-{}",
+                    uuid,
+                    actual_ns.unwrap_or(consts::DEFAULT_FUNCTION_NAMESPACE)
+                ),
             ),
         }
     }
 }
-
-// impl From<ContainerStaticMetadata> for function::Query {
-//     fn from(metadata: ContainerStaticMetadata) -> Self {
-//         function::Query {
-//             service: metadata.container_id,
-//             namespace: Some(metadata.namespace),
-//         }
-//     }
-// }
 
 // /// A function is a container instance with correct cni connected
 // #[derive(Debug)]

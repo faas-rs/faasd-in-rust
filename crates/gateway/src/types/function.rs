@@ -1,6 +1,6 @@
 // https://github.com/openfaas/faas/blob/7803ea1861f2a22adcbcfa8c79ed539bc6506d5b/api-docs/spec.openapi.yml
 
-use std::{collections::HashMap, str::FromStr};
+use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
@@ -127,30 +127,9 @@ pub struct Status {
 
 #[derive(Eq, Hash, PartialEq, Clone, Debug)]
 pub struct Query {
-    /// Name of deployed function
     pub service: String,
-
-    /// Namespace of deployed function
     pub namespace: Option<String>,
-}
-
-/// TODO: 其实应该是 try from, 排除非法的函数名
-impl FromStr for Query {
-    type Err = ();
-
-    fn from_str(function_name: &str) -> Result<Self, Self::Err> {
-        Ok(if let Some(index) = function_name.rfind('.') {
-            Self {
-                service: function_name[..index].to_string(),
-                namespace: Some(function_name[index + 1..].to_string()),
-            }
-        } else {
-            Self {
-                service: function_name.to_string(),
-                namespace: Some("default".to_string()),
-            }
-        })
-    }
+    pub uuid: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

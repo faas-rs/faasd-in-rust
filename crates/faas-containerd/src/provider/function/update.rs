@@ -10,6 +10,7 @@ impl ContainerdProvider {
         let function = Query {
             service: param.service.clone(),
             namespace: param.namespace.clone(),
+            uuid: None,
         };
         self._delete(function).await.map_err(|e| {
             log::error!("failed to delete function when update because {:?}", e);

@@ -4,13 +4,15 @@ use gateway::{
 };
 
 use crate::{
-    impls::{backend, cni::Endpoint, container::ContainerError},
+    impls::{
+        backend, cni::Endpoint, container::ContainerError, namespace::get_namespace_without_uuid,
+    },
     provider::ContainerdProvider,
 };
 
 impl ContainerdProvider {
     pub(crate) async fn _status(&self, function: Query) -> Result<Status, ResolveError> {
-        let endpoint: Endpoint = function.into();
+        let endpoint: Endpoint = Endpoint::from(function);
         let container = backend().load_container(&endpoint).await.map_err(|e| {
             log::error!(
                 "failed to load container for function {:?} because {:?}",
@@ -43,10 +45,11 @@ impl ContainerdProvider {
             }
         }
 
+        let namespace = get_namespace_without_uuid(&endpoint.namespace);
         // 大部分字段并未实现，使用None填充
         let status = Status {
             name: container.id,
-            namespace: Some(endpoint.namespace),
+            namespace: Some(namespace),
             image: container.image,
             env_process: None,
             env_vars: None,
