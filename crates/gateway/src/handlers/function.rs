@@ -12,7 +12,7 @@ pub async fn deploy<P: Provider>(
     provider: web::Data<P>,
     info: web::Json<Deployment>,
 ) -> Result<HttpResponse, DeployError> {
-    let service = info.0.service.clone();
+    let service = info.0.function_name.clone();
     (*provider).deploy(info.0).await.map(|()| {
         HttpResponse::Accepted().body(format!("function {} was created successfully", service))
     })
@@ -22,7 +22,7 @@ pub async fn update<P: Provider>(
     provider: web::Data<P>,
     info: web::Json<Deployment>,
 ) -> Result<HttpResponse, UpdateError> {
-    let service = info.0.service.clone();
+    let service = info.0.function_name.clone();
     (*provider).update(info.0).await.map(|()| {
         HttpResponse::Accepted().body(format!("function {} was updated successfully", service))
     })

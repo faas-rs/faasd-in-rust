@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "camelCase")]
 pub struct Deployment {
     /// Service is the name of the function deployment
-    pub service: String,
+    pub function_name: String,
 
     /// Image is a fully-qualified container image
     pub image: String,
@@ -73,7 +73,7 @@ pub struct Usage {
 #[serde(rename_all = "camelCase")]
 pub struct Status {
     /// The name of the function
-    pub name: String,
+    pub function_name: String,
 
     /// The fully qualified docker image name of the function
     pub image: String,

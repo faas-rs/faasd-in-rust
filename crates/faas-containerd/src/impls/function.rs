@@ -15,7 +15,7 @@ impl From<function::Deployment> for ContainerStaticMetadata {
         ContainerStaticMetadata {
             image: info.image,
             endpoint: Endpoint::new(
-                &info.service,
+                &info.function_name,
                 &info
                     .namespace
                     .unwrap_or(consts::DEFAULT_FUNCTION_NAMESPACE.to_string()),
