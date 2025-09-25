@@ -60,7 +60,7 @@ impl ContainerdService {
     /// 创建并启动任务
     pub async fn new_task(&self, mounts: Vec<Mount>, endpoint: &Endpoint) -> Result<(), TaskError> {
         let Endpoint {
-            service: cid,
+            function_name: cid,
             namespace: ns,
         } = endpoint;
         // let mounts = self.get_mounts(cid, ns).await?;
@@ -103,7 +103,7 @@ impl ContainerdService {
 
     pub async fn get_task(&self, endpoint: &Endpoint) -> Result<Process, TaskError> {
         let Endpoint {
-            service: cid,
+            function_name: cid,
             namespace: ns,
         } = endpoint;
         let mut tc = self.client.tasks();
@@ -179,7 +179,7 @@ impl ContainerdService {
     /// 杀死并删除任务
     pub async fn kill_task_with_timeout(&self, endpoint: &Endpoint) -> Result<(), TaskError> {
         let Endpoint {
-            service: cid,
+            function_name: cid,
             namespace: ns,
         } = endpoint;
         let kill_timeout = Duration::from_secs(5);

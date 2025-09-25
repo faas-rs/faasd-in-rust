@@ -312,7 +312,7 @@ impl ContainerdService {
 
         let spec = generate_default_unix_spec(
             &metadata.endpoint.namespace,
-            &metadata.endpoint.service,
+            &metadata.endpoint.function_name,
             &rt_conf,
         )?;
         let spec_json = serde_json::to_string(&spec).map_err(|e| {

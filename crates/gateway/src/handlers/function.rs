@@ -12,9 +12,9 @@ pub async fn deploy<P: Provider>(
     provider: web::Data<P>,
     info: web::Json<Deployment>,
 ) -> Result<HttpResponse, DeployError> {
-    let service = info.0.function_name.clone();
+    let function_name = info.0.function_name.clone();
     (*provider).deploy(info.0).await.map(|()| {
-        HttpResponse::Accepted().body(format!("function {} was created successfully", service))
+        HttpResponse::Accepted().body(format!("function {} was created successfully", function_name))
     })
 }
 
@@ -22,9 +22,9 @@ pub async fn update<P: Provider>(
     provider: web::Data<P>,
     info: web::Json<Deployment>,
 ) -> Result<HttpResponse, UpdateError> {
-    let service = info.0.function_name.clone();
+    let function_name = info.0.function_name.clone();
     (*provider).update(info.0).await.map(|()| {
-        HttpResponse::Accepted().body(format!("function {} was updated successfully", service))
+        HttpResponse::Accepted().body(format!("function {} was updated successfully", function_name))
     })
 }
 
@@ -32,15 +32,15 @@ pub async fn delete<P: Provider>(
     provider: web::Data<P>,
     info: web::Json<Delete>,
 ) -> Result<HttpResponse, DeleteError> {
-    let service = info.0.function_name.clone();
+    let function_name = info.0.function_name.clone();
     let query = Query {
-        service: service.clone(),
+        function_name: function_name.clone(),
         namespace: Some(info.0.namespace),
     };
     (*provider)
         .delete(query)
         .await
-        .map(|()| HttpResponse::Ok().body(format!("function {} was deleted successfully", service)))
+        .map(|()| HttpResponse::Ok().body(format!("function {} was deleted successfully", function_name)))
 }
 
 #[derive(Debug, Deserialize)]
@@ -65,11 +65,11 @@ pub struct StatusParam {
 
 pub async fn status<P: Provider>(
     provider: web::Data<P>,
-    name: web::Path<String>,
+    function_name: web::Path<String>,
     info: web::Query<StatusParam>,
 ) -> Result<HttpResponse, ResolveError> {
     let query = Query {
-        service: name.into_inner(),
+        function_name: function_name.into_inner(),
         namespace: info.namespace.clone(),
     };
     let status = (*provider).status(query).await?;
