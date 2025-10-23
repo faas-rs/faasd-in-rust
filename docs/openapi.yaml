@@ -6,8 +6,8 @@ info:
     name: GPL-3.0
   version: 0.1.0
 servers:
-- url: "http://localhost:8080"
-  description: Local server
+  - url: "http://localhost:8080"
+    description: Local server
 tags:
   - name: internal
     description: Internal use only
@@ -62,13 +62,21 @@ paths:
       summary: Remove a deployed function.
       tags:
         - system
-      requestBody:
-        description: Function to delete
-        content:
-          application/json:
-            schema:
-              "$ref": "#/components/schemas/DeleteFunctionRequest"
-        required: true
+      parameters:
+        - name: function_name
+          in: query
+          description: Name of deployed function
+          required: true
+          schema:
+            type: string
+            example: nginx
+        - name: namespace
+          in: query
+          description: Optional namespace of the function
+          required: false
+          schema:
+            type: string
+            example: faasd-in-rs-fn
       responses:
         '200':
           description: OK
@@ -76,7 +84,7 @@ paths:
           description: Not Found
         '500':
           description: Internal Server Error
-    update:
+    put:
       operationId: UpdateFunction
       description: Update an existing function.
       summary: Update an existing function.
@@ -109,20 +117,20 @@ paths:
       tags:
         - function
       parameters:
-      - name: function_name_namespace
-        in: path
-        description: Function name and namespace
-        required: true
-        schema:
-          type: string
-          example: echo.test
-      - name: function_name
-        in: path
-        description: function_name
-        required: true           
-        schema:
-          type: string
-          example: echo 
+        - name: function_name_namespace
+          in: path
+          description: Function name and namespace
+          required: true
+          schema:
+            type: string
+            example: echo.test
+        - name: function_name
+          in: path
+          description: function_name
+          required: true
+          schema:
+            type: string
+            example: echo
       requestBody:
         description: "(Optional) data to pass to function"
         content:
@@ -142,7 +150,7 @@ paths:
         '500':
           description: Internal server error
         '503':
-          description: Error Service Unavailable
+          description: Service Unavailable
   "/auth/login":
     post:
       operationId: Login
@@ -164,7 +172,9 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [token,token_type]
+                required:
+                  - token
+                  - token_type
                 properties:
                   token:
                     type: string
@@ -198,17 +208,19 @@ paths:
         '201':
           description: User registered successfully
           content:
-            application/json:      
-            schema:
-              type: object
-              required: [message, user_id]
-              properties:
-                message:
-                  type: string
-                  example: User created successfully
-                user_id:
-                  type: string
-                  example: "10086"      
+            application/json:
+              schema:
+                type: object
+                required:
+                  - message
+                  - user_id
+                properties:
+                  message:
+                    type: string
+                    example: User created successfully
+                  user_id:
+                    type: string
+                    example: "10086"
         '409':
           description: Conflict
         '500':
@@ -217,8 +229,8 @@ components:
   schemas:
     FunctionDeployment:
       required:
-      - function_name
-      - image
+        - function_name
+        - image
       type: object
       properties:
         function_name:
@@ -256,7 +268,7 @@ components:
             foo: bar
     DeleteFunctionRequest:
       required:
-      - function_name
+        - function_name
       type: object
       properties:
         function_name:
