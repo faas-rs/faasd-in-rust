@@ -1,5 +1,7 @@
 import React ,{useState, useRef}from 'react';
+
 function Login() {
+  
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -14,9 +16,7 @@ function Login() {
     setError('');
     setLoading(true);
   };
-  const loginRequest = async () => {
-    const res = await fetch ('https://http://127.0.0.1:8080/auth/login')
-  }
+
   return (
     <form onSubmit={handleSubmit}>
       <div>
