@@ -31,7 +31,6 @@ service.interceptors.response.use(
     return data.data   
   },
   error => {
-
     const msg = error.response?.data?.msg || error.message || '网络错误'
     ElMessage.error(msg)
     return Promise.reject(error)
@@ -39,17 +38,6 @@ service.interceptors.response.use(
 )
 
 // 4. 业务接口——这里集中写
-export const getUser = id => service.get(`/user/${id}`)
-export const getUserList = params => service.get('/user', { params })
-export const addUser = data => service.post('/user', data)
-export const updateUser = (id, data) => service.put(`/user/${id}`, data)
-export const delUser = id => service.delete(`/user/${id}`)
-
-
-export const addOrder = data => service.post('/order', data)
-export const getOrder = id => service.get(`/order/${id}`)
-
-
 export const authLogin = (payload) =>
   axios.post(`${import.meta.env.VITE_BASE_API || ''}/auth/login`, payload)
     .then(res => res.data)
@@ -59,7 +47,14 @@ export const authRegister = (payload) =>
   axios.post(`${import.meta.env.VITE_BASE_API || ''}/auth/register`, payload)
     .then(res => res.data)
 
-// 备用示例：如果你想使用 service（带拦截器），直接用下面语法
+export const getFunctionsList = () => service.get('/system/functions')
+export const deployFunction = (payload) => service.post('/system/functions', payload)
+export const deleteFunction = (functionName, namespace) => service.delete(`/system/functions`,
+  { params: { function_name: functionName, namespace } })
+export const updateFunction = (functionName, payload) => 
+  service.put(`/system/functions`, payload)
+export const invokeFunction = (functionName, namespace) => 
+  service.post(`/function/${functionName}_${namespace}/${functionName}`)
 // export const someApi = (data) => service.post('/some', data)
 
 export default service

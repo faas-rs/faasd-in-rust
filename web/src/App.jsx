@@ -1,19 +1,18 @@
-import { useState } from 'react'
+import { useState , useRef} from 'react'
 import Login from './login'
 import Register from './register'
+import Mainpage from './mainpage'
 
 function App() {
-	const [loading, setLoading] = useState(false);
-  const [logined, setLogined] = useState(false);
+
+  const [loading, setLoading] = useState(false);
+  const [logined, setLogined] = useState(true);
   const [mode, setMode] = useState('login'); // 'login' | 'register'
+  const usernameRef = useRef('defaultUser');
 
   if (logined) {
     return (
-      <div style={{ padding: 20 }}>
-        <h1>Welcome</h1>
-        <p>已登录</p>
-        <button onClick={() => { localStorage.removeItem('token'); setLogined(false) }}>Logout</button>
-      </div>
+		<Mainpage username={usernameRef.current}> </Mainpage>
     )
   }
 
@@ -27,7 +26,7 @@ function App() {
       </div>
 
 			{mode === 'login' ? (
-        <Login loading={loading} setLoading={setLoading} setLogined={setLogined} />
+        <Login loading={loading} setLoading={setLoading} setLogined={setLogined} setUsernameRef={setUsernameRef}/>
       ) : (
         <Register loading={loading} setLoading={setLoading} setLogined={setLogined} onCancel={() => setMode('login')} />
       )}

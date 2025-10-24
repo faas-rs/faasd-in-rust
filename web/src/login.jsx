@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { authLogin } from './http.js'
 
-function Login({ loading, setLoading, setLogined }) {
+function Login({ loading, setLoading, setLogined, setUsernameRef }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -21,6 +21,7 @@ function Login({ loading, setLoading, setLogined }) {
       if (token) {
         localStorage.setItem('token', token);
         setLogined(true);
+        setUsernameRef(username);
         alert('登录成功');
       } else {
         setError(body?.message || JSON.stringify(body));
