@@ -25,14 +25,14 @@ service.interceptors.response.use(
   (response) => {
     const { data } = response
     if (data.code !== 0) {
-      ElMessage.error(data.msg || '服务器异常')
+      console.error('API error', data)
       return Promise.reject(new Error(data.msg || 'Error'))
     }
     return data.data   
   },
   error => {
     const msg = error.response?.data?.msg || error.message || '网络错误'
-    ElMessage.error(msg)
+    console.error('deploy failed', error);
     return Promise.reject(error)
   }
 )

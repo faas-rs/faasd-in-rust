@@ -12,9 +12,9 @@ export function Deployform({submitting,
         try {
           // 根据你的后端接口调整 payload 结构
           const payload = {
-            name: form.functionName,
-            image: form.image,
+            functionName: form.functionName,
             namespace: form.namespace,
+            image: form.image,
           };
           await deployFunction(payload);
           setShowDeployForm(false);
@@ -55,17 +55,17 @@ export function Deployform({submitting,
 
             <label>
               FunctionName
-              <input name="name" value={form.name} onChange={handleChange} required />
-            </label>
-
-            <label>
-              Image
-              <input name="image" value={form.image} onChange={handleChange} required />
+              <input name="functionName" value={form.name} onChange={handleChange} required />
             </label>
 
             <label>
               Namespace
               <input name="namespace" value={form.namespace} onChange={handleChange} required />
+            </label>
+
+            <label>
+              Image
+              <input name="image" value={form.image} onChange={handleChange} required />
             </label>
 
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>

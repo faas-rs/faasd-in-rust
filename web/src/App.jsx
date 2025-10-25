@@ -6,7 +6,7 @@ import Mainpage from './mainpage'
 function App() {
 
   const [loading, setLoading] = useState(false);
-  const [logined, setLogined] = useState(true);
+  const [logined, setLogined] = useState(false);
   const [mode, setMode] = useState('login'); // 'login' | 'register'
   const usernameRef = useRef('defaultUser');
 
@@ -26,7 +26,7 @@ function App() {
       </div>
 
 			{mode === 'login' ? (
-        <Login loading={loading} setLoading={setLoading} setLogined={setLogined} setUsernameRef={setUsernameRef}/>
+        <Login loading={loading} setLoading={setLoading} setLogined={setLogined} usernameRef={usernameRef} />
       ) : (
         <Register loading={loading} setLoading={setLoading} setLogined={setLogined} onCancel={() => setMode('login')} />
       )}
