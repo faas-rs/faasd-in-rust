@@ -24,11 +24,18 @@ service.interceptors.request.use(
 service.interceptors.response.use(
   (response) => {
     const { data } = response
-    if (data.code !== 0) {
-      console.error('API error', data)
-      return Promise.reject(new Error(data.msg || 'Error'))
+    try {
+      window.dispatchEvent(new CustomEvent('http:response', {
+        detail: {
+          url: response.config?.url,
+          status: response.status,
+          data,
+        }
+      }))
+    } catch (e) {
+      // ignore in non-browser env
     }
-    return data.data   
+    return data   
   },
   error => {
     const msg = error.response?.data?.msg || error.message || '网络错误'
@@ -47,14 +54,14 @@ export const authRegister = (payload) =>
   axios.post(`${import.meta.env.VITE_BASE_API || ''}/auth/register`, payload)
     .then(res => res.data)
 
-export const getFunctionsList = () => service.get('/system/functions')
+export const getFunctionsList = (params = {}) => service.get('/system/functions', {params})
 export const deployFunction = (payload) => service.post('/system/functions', payload)
-export const deleteFunction = (functionName, namespace) => service.delete(`/system/functions`,
-  { params: { function_name: functionName, namespace } })
-export const updateFunction = (functionName, payload) => 
+export const deleteFunction = (payload) => service.delete(`/system/functions`,
+{data: payload})
+export const updateFunction = (payload) => 
   service.put(`/system/functions`, payload)
 export const invokeFunction = (functionName, namespace) => 
-  service.post(`/function/${functionName}_${namespace}/${functionName}`)
+  service.post(`/function/${functionName}.${namespace}/${functionName}`)
 // export const someApi = (data) => service.post('/some', data)
 
 export default service

@@ -2,7 +2,7 @@ import {useEffect, useState} from 'react';
 import { getFunctionsList, 
   deployFunction, deleteFunction, 
   updateFunction, invokeFunction } from './http.js';
-import { Deployform } from './deploy.jsx';
+import { Form } from './deploy.jsx';
 import { FunctionItem } from './function.jsx';
 
 function Mainpage ({username}) {
@@ -12,7 +12,7 @@ function Mainpage ({username}) {
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({
     functionName: '',
-    namespace: '',
+    namespace: username,
     image: '',
   });
 
@@ -21,17 +21,18 @@ function Mainpage ({username}) {
   },[])
 
   const openDeploy = () => {
-    setForm({ functionName: '', namespace: '', image: '' });
+    setForm({ functionName: '', namespace: username, image: '' });
     setShowDeployForm(true);
   };
   // 从后端获取响应并写入state
   const fetchList = async () => {
     try {
-      const response = await getFunctionsList();
+      const response = await getFunctionsList({ namespace: username });
+      console.log('raw response from getFunctionsList:', response);
       const list = Array.isArray(response) 
       ? response.map(item =>{
         return {
-          functionName: item.function_name || '',
+          functionName: item.functionName || '',
           namespace: item.namespace || '',
           image: item.image || '',
         }
@@ -49,17 +50,26 @@ function Mainpage ({username}) {
       <button key = 'getlist' onClick={fetchList}>getlist</button>
       <div>
         {functions.map(func => (
-          <FunctionItem key={func.functionName} {...func} />
+          <FunctionItem id = {func.functionName} key={func.functionName} 
+          {...func}
+            updateFunction={updateFunction}
+            fetchList={fetchList}
+            deleteFunction={deleteFunction}
+            invokeFunction={invokeFunction}
+            setFunctions={setFunctions}
+           />
         ))}
       </div>
       {showDeployForm && (
-        <Deployform submitting={submitting}
+        <Form submitting={submitting}
           setSubmitting={setSubmitting}
-          setShowDeployForm={setShowDeployForm}
+          setShowForm={setShowDeployForm}
           form={form}
           setForm={setForm}
           deployFunction={deployFunction}
-          fetchList={fetchList}></Deployform>
+          fetchList={fetchList}
+          updateFunction={updateFunction}
+          formType = 'deploy'></Form>
       )}
     </div>    
   )

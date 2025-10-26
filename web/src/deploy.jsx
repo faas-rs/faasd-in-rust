@@ -1,6 +1,6 @@
-export function Deployform({submitting, 
-    setSubmitting, setShowDeployForm, form, setForm, 
-    deployFunction, fetchList}){
+export function Form({submitting, 
+    setSubmitting, setShowForm, form, setForm, 
+    deployFunction, fetchList,updateFunction,formType}) {
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -16,11 +16,15 @@ export function Deployform({submitting,
             namespace: form.namespace,
             image: form.image,
           };
-          await deployFunction(payload);
-          setShowDeployForm(false);
+          if (formType === 'deploy') {
+            await deployFunction(payload);
+          } else if (formType === 'update') {
+            await updateFunction(payload);
+          }
+          setShowForm(false);
           await fetchList();
         } catch (err) {
-          console.error('deploy error', err);
+          console.error('error', err);
           // 可在这里显示错误提示
         } finally {
           setSubmitting(false);
@@ -51,17 +55,18 @@ export function Deployform({submitting,
               gap: 10,
             }}
           >
-            <h3>Deploy Function</h3>
+            {formType === 'deploy' && <h3>Deploy Function</h3>}
+            {formType === 'update' && <h3>Update Function</h3>}
 
             <label>
               FunctionName
-              <input name="functionName" value={form.name} onChange={handleChange} required />
+              <input name="functionName" value={form.functionName} onChange={handleChange} required />
             </label>
 
-            <label>
+            {/* <label>
               Namespace
               <input name="namespace" value={form.namespace} onChange={handleChange} required />
-            </label>
+            </label> */}
 
             <label>
               Image
@@ -69,7 +74,7 @@ export function Deployform({submitting,
             </label>
 
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button type="button" onClick={() => setShowDeployForm(false)} disabled={submitting}>
+              <button type="button" onClick={() => setShowForm(false)} disabled={submitting}>
                 Cancel
               </button>
               <button type="submit" disabled={submitting}>
