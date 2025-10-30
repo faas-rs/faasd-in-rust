@@ -1,5 +1,5 @@
 use crate::impls::cni::Endpoint;
-use crate::impls::{backend, cni};
+use crate::impls::{backend, cni, task::TaskError};
 use crate::provider::ContainerdProvider;
 use gateway::handlers::function::DeleteError;
 use gateway::types::function::Query;
@@ -9,8 +9,15 @@ impl ContainerdProvider {
         let endpoint: Endpoint = function.into();
         log::trace!("Deleting function: {:?}", endpoint);
 
-        backend().kill_task_with_timeout(&endpoint).await?;
-
+        match backend().kill_task_with_timeout(&endpoint).await {
+            Ok(_)=>{},
+            Err(e)=> {
+                match e {
+                    TaskError::NotFound=> {}
+                    _ => return Err(DeleteError::Internal(format!("kill task failed: {:?}", e)))
+                }
+            }
+        };
         let del_ctr_err = backend().delete_container(&endpoint).await.map_err(|e| {
             log::error!("Failed to delete container: {:?}", e);
             e

@@ -31,7 +31,10 @@ impl ContainerdProvider {
                         replicas = 1;
                     }
                 }
-                Err(TaskError::NotFound) => continue,
+                Err(TaskError::NotFound) => {
+                    log::info!("task not found for endpoint {:?}, treating replicas=0", &endpoint);
+                    replicas = 0;
+                },
                 Err(e) => {
                     log::warn!(
                         "failed to get task for function {:?} because {:?}",
