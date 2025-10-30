@@ -1,5 +1,8 @@
-import { useState } from "react";
+import { useState ,useCallback} from "react";
 import { Form, InvokeForm } from "./form.jsx";
+import { Output } from "./output.jsx";
+import { useDebounce } from "./debounce.jsx";
+
 export function FunctionItem({ functionName, onClick }) {
   return (
     <div>
@@ -54,18 +57,19 @@ export function FunctionInfo({
     setShowUpdateForm(true);
   }
 
-  const handleDelete = async (functionName, namespace) => {
-    const payload = {
-      functionName: form.functionName,
-      namespace: form.namespace,
+  const handleDelete = useDebounce(async (functionName, namespace) => {
+    const payload = { 
+      functionName: functionName,
+      namespace: namespace
     };
+    console.log("deleting function with payload:", payload);
     await deleteFunction(payload);
     setFunctions((prev) =>
       prev.filter(
         (f) => !(f.functionName === functionName && f.namespace === namespace),
       ),
     );
-  };
+  }, 500);
 
   const handleInvoke = async () => {
     console.log(invokeForm);
@@ -87,6 +91,7 @@ export function FunctionInfo({
       >
         Update
       </button>
+      <Output response={invokeResponse}> </Output>
       {/*不能直接传函数名进去，会把event直接传给函数*/}
       <div>
         {showUpdateForm && (

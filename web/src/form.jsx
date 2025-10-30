@@ -140,9 +140,9 @@ export function InvokeForm({
       );
       setInvokeResponse(JSON.stringify(response, null, 2));
       setShowForm(false);
-      console.log('invoke response:', response);
+      console.log("invoke response:", response);
     } catch (error) {
-      console.log('err',error);
+      console.log("err", error);
     } finally {
       setSubmitting(false);
     }
