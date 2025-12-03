@@ -5,16 +5,22 @@ import {
   deleteFunction,
   updateFunction,
   invokeFunction,
-} from "./http.js";
-import { Form } from "./form.jsx";
-import { FunctionItem, FunctionInfo } from "./function.jsx";
-import User from "./user.jsx";
+  FunctionItem as FunctionItemType,
+} from "./http";
+import { Form } from "./form";
+import { FunctionItem, FunctionInfo } from "./function";
+import User from "./user";
 
-function Mainpage({ username, setLogined }) {
-  const [functions, setFunctions] = useState([]);
-  const [showDeployForm, setShowDeployForm] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [selFuncId, setSelFuncId] = useState(null);
+interface MainpageProps {
+  username: React.MutableRefObject<string>;
+  setLogined: (value: boolean) => void;
+}
+
+function Mainpage({ username, setLogined }: MainpageProps) {
+  const [functions, setFunctions] = useState<FunctionItemType[]>([]);
+  const [showDeployForm, setShowDeployForm] = useState<boolean>(false);
+  const [submitting, setSubmitting] = useState<boolean>(false);
+  const [selFuncId, setSelFuncId] = useState<string | null>(null);
   const [form, setForm] = useState({
     functionName: "",
     namespace: username.current,
@@ -33,6 +39,7 @@ function Mainpage({ username, setLogined }) {
     setForm({ functionName: "", namespace: username.current, image: "" });
     setShowDeployForm(true);
   };
+  
   // 从后端获取响应并写入state
   const fetchList = async () => {
     try {

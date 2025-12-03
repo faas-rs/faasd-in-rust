@@ -3,11 +3,13 @@ import Login from "./login";
 import Register from "./register";
 import Mainpage from "./mainpage";
 
+type Mode = "login" | "register";
+
 function App() {
-  const [loading, setLoading] = useState(false);
-  const [logined, setLogined] = useState(false);
-  const [mode, setMode] = useState("login"); // 'login' | 'register'
-  const usernameRef = useRef("defaultUser");
+  const [loading, setLoading] = useState<boolean>(false);
+  const [logined, setLogined] = useState<boolean>(false);
+  const [mode, setMode] = useState<Mode>("login");
+  const usernameRef = useRef<string>("defaultUser");
 
   if (logined) {
     return <Mainpage username={usernameRef} setLogined={setLogined} />;

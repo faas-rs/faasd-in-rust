@@ -1,3 +1,26 @@
+import { FormEvent, ChangeEvent } from "react";
+import { FunctionPayload } from "./http";
+
+interface FormProps {
+  submitting: boolean;
+  setSubmitting: (value: boolean) => void;
+  setShowForm: (value: boolean) => void;
+  form: {
+    functionName: string;
+    namespace: string;
+    image: string;
+  };
+  setForm: React.Dispatch<React.SetStateAction<{
+    functionName: string;
+    namespace: string;
+    image: string;
+  }>>;
+  deployFunction: (payload: FunctionPayload) => Promise<any>;
+  fetchList: () => Promise<void>;
+  updateFunction: (payload: FunctionPayload) => Promise<any>;
+  formType: "deploy" | "update";
+}
+
 export function Form({
   submitting,
   setSubmitting,
@@ -8,17 +31,18 @@ export function Form({
   fetchList,
   updateFunction,
   formType,
-}) {
-  const handleChange = (e) => {
+}: FormProps) {
+  const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setForm((s) => ({ ...s, [name]: value }));
   };
-  const handleSubmit = async (e) => {
+  
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setSubmitting(true);
     try {
       // 根据你的后端接口调整 payload 结构
-      const payload = {
+      const payload: FunctionPayload = {
         functionName: form.functionName,
         namespace: form.namespace,
         image: form.image,
@@ -37,6 +61,7 @@ export function Form({
       setSubmitting(false);
     }
   };
+  
   return (
     <div
       style={{
@@ -75,11 +100,6 @@ export function Form({
           />
         </label>
 
-        {/* <label>
-              Namespace
-              <input name="namespace" value={form.namespace} onChange={handleChange} required />
-            </label> */}
-
         <label>
           Image
           <input
@@ -107,6 +127,37 @@ export function Form({
   );
 }
 
+interface InvokeFormProps {
+  functionName: string;
+  namespace: string;
+  submitting: boolean;
+  setSubmitting: (value: boolean) => void;
+  setShowForm: (value: boolean) => void;
+  form: {
+    route: string;
+    header: {
+      Content_Type: string;
+    };
+    data: string;
+  };
+  setForm: React.Dispatch<React.SetStateAction<{
+    route: string;
+    header: {
+      Content_Type: string;
+    };
+    data: string;
+  }>>;
+  invokeFunction: (
+    functionName: string,
+    namespace: string,
+    route: string,
+    data: any,
+    contentType: string,
+  ) => Promise<any>;
+  invokeResponse: string;
+  setInvokeResponse: (value: string) => void;
+}
+
 export function InvokeForm({
   functionName,
   namespace,
@@ -116,15 +167,14 @@ export function InvokeForm({
   form,
   setForm,
   invokeFunction,
-  invokeResponse,
   setInvokeResponse,
-}) {
-  const handleChange = (e) => {
+}: InvokeFormProps) {
+  const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setForm((s) => ({ ...s, [name]: value }));
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setSubmitting(true);
     try {
@@ -147,6 +197,7 @@ export function InvokeForm({
       setSubmitting(false);
     }
   };
+  
   return (
     <div
       style={{
@@ -187,7 +238,7 @@ export function InvokeForm({
           Content-Type
           <input
             value={form.header.Content_Type}
-            onChange={(e) =>
+            onChange={(e: ChangeEvent<HTMLInputElement>) =>
               setForm((s) => ({
                 ...s,
                 header: { ...s.header, Content_Type: e.target.value },

@@ -1,9 +1,16 @@
-import { useState, useCallback } from "react";
-import { Form, InvokeForm } from "./form.jsx";
-import { Output } from "./output.jsx";
-import { useDebounce } from "./debounce.jsx";
+import { useState } from "react";
+import { Form, InvokeForm } from "./form";
+import { Output } from "./output";
+import { useDebounce } from "./debounce";
+import { FunctionItem as FunctionItemType, FunctionPayload } from "./http";
 
-export function FunctionItem({ functionName, onClick }) {
+interface FunctionItemProps {
+  functionName: string;
+  onClick: () => void;
+  id?: string;
+}
+
+export function FunctionItem({ functionName, onClick }: FunctionItemProps) {
   return (
     <div>
       <button
@@ -18,6 +25,20 @@ export function FunctionItem({ functionName, onClick }) {
   );
 }
 
+interface FunctionInfoProps extends FunctionItemType {
+  invokeFunction: (
+    functionName: string,
+    namespace: string,
+    route: string,
+    data: any,
+    contentType: string,
+  ) => Promise<any>;
+  deleteFunction: (payload: Pick<FunctionPayload, 'functionName' | 'namespace'>) => Promise<any>;
+  updateFunction: (payload: FunctionPayload) => Promise<any>;
+  fetchList: () => Promise<void>;
+  setFunctions: React.Dispatch<React.SetStateAction<FunctionItemType[]>>;
+}
+
 export function FunctionInfo({
   invokeFunction,
   deleteFunction,
@@ -27,9 +48,9 @@ export function FunctionInfo({
   namespace,
   image,
   setFunctions,
-}) {
-  const [showUpdateForm, setShowUpdateForm] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+}: FunctionInfoProps) {
+  const [showUpdateForm, setShowUpdateForm] = useState<boolean>(false);
+  const [submitting, setSubmitting] = useState<boolean>(false);
   const [form, setForm] = useState({
     functionName: functionName,
     namespace: namespace,
@@ -39,13 +60,12 @@ export function FunctionInfo({
     route: "",
     header: {
       Content_Type: "",
-      /**/
     },
     data: "",
   });
-  const [invokeSubmitting, setInvokeSubmitting] = useState(false);
-  const [invokeResponse, setInvokeResponse] = useState("");
-  const [showInvokeForm, setShowInvokeForm] = useState(false);
+  const [invokeSubmitting, setInvokeSubmitting] = useState<boolean>(false);
+  const [invokeResponse, setInvokeResponse] = useState<string>("");
+  const [showInvokeForm, setShowInvokeForm] = useState<boolean>(false);
 
   function openUpdate() {
     setForm({
@@ -56,7 +76,7 @@ export function FunctionInfo({
     setShowUpdateForm(true);
   }
 
-  const handleDelete = useDebounce(async (functionName, namespace) => {
+  const handleDelete = useDebounce(async (functionName: string, namespace: string) => {
     const payload = {
       functionName: functionName,
       namespace: namespace,
@@ -74,6 +94,7 @@ export function FunctionInfo({
     console.log(invokeForm);
     setShowInvokeForm(true);
   };
+  
   return (
     <div>
       <p>Function: {functionName}</p>

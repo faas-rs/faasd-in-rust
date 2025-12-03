@@ -1,12 +1,19 @@
-import React, { useState } from "react";
-import { authRegister } from "./http.js";
+import { useState, FormEvent, ChangeEvent } from "react";
+import { authRegister } from "./http";
 
-function Register({ loading, setLoading, setLogined, onCancel }) {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+interface RegisterProps {
+  loading: boolean;
+  setLoading: (value: boolean) => void;
+  setLogined: (value: boolean) => void;
+  onCancel?: () => void;
+}
 
-  const handleSubmit = async (e) => {
+function Register({ loading, setLoading, onCancel }: RegisterProps) {
+  const [username, setUsername] = useState<string>("");
+  const [password, setPassword] = useState<string>("");
+  const [error, setError] = useState<string>("");
+
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");
     if (!username.trim() || !password.trim()) {
@@ -23,8 +30,7 @@ function Register({ loading, setLoading, setLogined, onCancel }) {
       } else {
         setError(JSON.stringify(body));
       }
-    } catch (err) {
-      const status = err?.response?.status;
+    } catch (err: any) {
       const msg =
         err?.response?.data?.msg ??
         err?.response?.data?.message ??
@@ -52,7 +58,7 @@ function Register({ loading, setLoading, setLogined, onCancel }) {
           <input
             type="text"
             value={username}
-            onChange={(e) => setUsername(e.target.value)}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => setUsername(e.target.value)}
             style={{ width: "100%" }}
           />
         </label>
@@ -64,7 +70,7 @@ function Register({ loading, setLoading, setLogined, onCancel }) {
           <input
             type="password"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
             style={{ width: "100%" }}
           />
         </label>

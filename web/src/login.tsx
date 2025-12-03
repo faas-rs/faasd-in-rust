@@ -1,12 +1,19 @@
-import React, { useState } from "react";
-import { authLogin } from "./http.js";
+import React, { useState, FormEvent, ChangeEvent } from "react";
+import { authLogin } from "./http";
 
-function Login({ loading, setLoading, setLogined, usernameRef }) {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+interface LoginProps {
+  loading: boolean;
+  setLoading: (value: boolean) => void;
+  setLogined: (value: boolean) => void;
+  usernameRef: React.MutableRefObject<string>;
+}
 
-  const handleSubmit = async (e) => {
+function Login({ loading, setLoading, setLogined, usernameRef }: LoginProps) {
+  const [username, setUsername] = useState<string>("");
+  const [password, setPassword] = useState<string>("");
+  const [error, setError] = useState<string>("");
+
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");
     if (!username.trim() || !password.trim()) {
@@ -26,9 +33,8 @@ function Login({ loading, setLoading, setLogined, usernameRef }) {
       } else {
         setError(body?.message || JSON.stringify(body));
       }
-    } catch (err) {
+    } catch (err: any) {
       const msg =
-        err?.response?.err ??
         err?.response?.data?.message ??
         err.message ??
         "网络错误";
@@ -54,7 +60,7 @@ function Login({ loading, setLoading, setLogined, usernameRef }) {
           <input
             type="text"
             value={username}
-            onChange={(e) => setUsername(e.target.value)}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => setUsername(e.target.value)}
             style={{ width: "100%" }}
           />
         </label>
@@ -66,7 +72,7 @@ function Login({ loading, setLoading, setLogined, usernameRef }) {
           <input
             type="password"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
             style={{ width: "100%" }}
           />
         </label>
