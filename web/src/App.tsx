@@ -1,7 +1,11 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
 import Login from "./login";
 import Register from "./register";
 import Mainpage from "./mainpage";
+import { Button } from "@/components/ui/button";
+import { Toaster } from "@/components/ui/toaster";
+import { Loader2 } from "lucide-react";
+import type { UserInfo } from "./types";
 
 type Mode = "login" | "register";
 
@@ -9,88 +13,68 @@ function App() {
   const [loading, setLoading] = useState<boolean>(false);
   const [logined, setLogined] = useState<boolean>(false);
   const [mode, setMode] = useState<Mode>("login");
-  const usernameRef = useRef<string>("defaultUser");
+  const [userInfo, setUserInfo] = useState<UserInfo>({ username: "" });
 
   if (logined) {
-    return <Mainpage username={usernameRef} setLogined={setLogined} />;
+    return (
+      <>
+        <Mainpage userInfo={userInfo} setLogined={setLogined} />
+        <Toaster />
+      </>
+    );
   }
 
   return (
-    /*登录界面*/
-    <div className="min-h-screen flex flex-col items-center justify-center p-4">
-      <h1 className="fixed top-4 left-4 bg-white/90  rounded-md px-3 py-1 text">
-        faasd-in-rs
-      </h1>
-      <h1 className="fixed top-4 left-60 bg-white/90  rounded-md px-3 py-1 text-sm">
-        v0.1.0
-      </h1>
-
-      <div style={{ marginBottom: 12 }}>
-        <button onClick={() => setMode("login")} disabled={mode === "login"}>
-          Login
-        </button>
-        <button
-          onClick={() => setMode("register")}
-          disabled={mode === "register"}
-        >
-          Register
-        </button>
+    <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+      <div className="absolute top-8 left-8 flex items-center gap-4">
+        <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600">
+          Faasd in Rust
+        </h1>
+        <span className="text-xs text-muted-foreground bg-white px-2 py-1 rounded-full border">
+          v0.1.0
+        </span>
       </div>
 
-      {mode === "login" ? (
-        <Login
-          loading={loading}
-          setLoading={setLoading}
-          setLogined={setLogined}
-          usernameRef={usernameRef}
-        />
-      ) : (
-        <Register
-          loading={loading}
-          setLoading={setLoading}
-          setLogined={setLogined}
-          onCancel={() => setMode("login")}
-        />
-      )}
+      <div className="w-full max-w-md space-y-4">
+        <div className="flex gap-2 justify-center">
+          <Button
+            variant={mode === "login" ? "default" : "outline"}
+            onClick={() => setMode("login")}
+            disabled={mode === "login"}
+          >
+            登录
+          </Button>
+          <Button
+            variant={mode === "register" ? "default" : "outline"}
+            onClick={() => setMode("register")}
+            disabled={mode === "register"}
+          >
+            注册
+          </Button>
+        </div>
+
+        {mode === "login" ? (
+          <Login
+            loading={loading}
+            setLoading={setLoading}
+            setLogined={setLogined}
+            setUserInfo={setUserInfo}
+          />
+        ) : (
+          <Register
+            loading={loading}
+            setLoading={setLoading}
+            onCancel={() => setMode("login")}
+          />
+        )}
+      </div>
 
       {loading && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.45)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 9999,
-          }}
-        >
-          <div
-            style={{
-              padding: "1rem 1.5rem",
-              background: "#fff",
-              borderRadius: 8,
-              boxShadow: "0 4px 20px rgba(0,0,0,0.2)",
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-            }}
-          >
-            <div
-              className="spinner"
-              aria-hidden
-              style={{
-                width: 18,
-                height: 18,
-                border: "3px solid #ccc",
-                borderTop: "3px solid #333",
-                borderRadius: "50%",
-                animation: "spin 1s linear infinite",
-              }}
-            />
-            <span>Loading…</span>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-background p-6 rounded-lg shadow-lg flex items-center gap-3">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            <span>处理中...</span>
           </div>
-          <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
         </div>
       )}
     </div>

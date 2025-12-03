@@ -3,25 +3,42 @@ import { Form, InvokeForm } from "./form";
 import { Output } from "./output";
 import { useDebounce } from "./debounce";
 import { FunctionItem as FunctionItemType, FunctionPayload } from "./http";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Play, Trash2, Edit, Package } from "lucide-react";
+import { Separator } from "@/components/ui/separator";
+import { useToast } from "@/hooks/use-toast";
+import { extractErrorMessage } from "./types";
 
 interface FunctionItemProps {
   functionName: string;
   onClick: () => void;
   id?: string;
+  isSelected?: boolean;
 }
 
-export function FunctionItem({ functionName, onClick }: FunctionItemProps) {
+export function FunctionItem({ functionName, onClick, isSelected }: FunctionItemProps) {
   return (
-    <div>
-      <button
-        className="w-16 shadow-md rounded-md "
-        onClick={() => {
-          onClick();
-        }}
-      >
-        {functionName}
-      </button>
-    </div>
+    <button
+      onClick={onClick}
+      className={`w-full text-left px-3 py-2 rounded-md transition-colors ${
+        isSelected
+          ? "bg-primary text-primary-foreground"
+          : "hover:bg-accent hover:text-accent-foreground"
+      }`}
+    >
+      <div className="flex items-center gap-2">
+        <Package className="h-4 w-4" />
+        <span className="text-sm font-medium truncate">{functionName}</span>
+      </div>
+    </button>
   );
 }
 
@@ -49,6 +66,7 @@ export function FunctionInfo({
   image,
   setFunctions,
 }: FunctionInfoProps) {
+  const { toast } = useToast();
   const [showUpdateForm, setShowUpdateForm] = useState<boolean>(false);
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [form, setForm] = useState({
@@ -59,7 +77,7 @@ export function FunctionInfo({
   const [invokeForm, setInvokeForm] = useState({
     route: "",
     header: {
-      Content_Type: "",
+      Content_Type: "application/json",
     },
     data: "",
   });
@@ -81,69 +99,105 @@ export function FunctionInfo({
       functionName: functionName,
       namespace: namespace,
     };
-    console.log("deleting function with payload:", payload);
-    await deleteFunction(payload);
-    setFunctions((prev) =>
-      prev.filter(
-        (f) => !(f.functionName === functionName && f.namespace === namespace),
-      ),
-    );
+    try {
+      console.log("deleting function with payload:", payload);
+      await deleteFunction(payload);
+      setFunctions((prev) =>
+        prev.filter(
+          (f) => !(f.functionName === functionName && f.namespace === namespace),
+        ),
+      );
+      toast({
+        title: "删除成功",
+        description: `函数 ${functionName} 已被删除`,
+        variant: "success",
+      });
+    } catch (err) {
+      console.error("delete error", err);
+      toast({
+        title: "删除失败",
+        description: extractErrorMessage(err),
+        variant: "destructive",
+      });
+    }
   }, 500);
 
   const handleInvoke = async () => {
-    console.log(invokeForm);
     setShowInvokeForm(true);
   };
-  
+
   return (
-    <div>
-      <p>Function: {functionName}</p>
-      <p>Namespace: {namespace}</p>
-      <p>Image: {image}</p>
-      <button className="px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-500 text-white rounded-full shadow-lg hover:shadow-xl active:scale-95 transition" onClick={() => handleInvoke()}>Invoke</button>
-      <button onClick={() => handleDelete(functionName, namespace)}>
-        Delete
-      </button>
-      <button
-        onClick={() => {
-          openUpdate();
-        }}
-      >
-        Update
-      </button>
-      <Output response={invokeResponse}> </Output>
-      {/*不能直接传函数名进去，会把event直接传给函数*/}
-      <div>
-        {showUpdateForm && (
-          <Form
-            submitting={submitting}
-            setSubmitting={setSubmitting}
-            setShowForm={setShowUpdateForm}
-            form={form}
-            setForm={setForm}
-            deployFunction={updateFunction}
-            fetchList={fetchList}
-            updateFunction={updateFunction}
-            formType="update"
-          />
-        )}
-      </div>
-      <div>
-        {showInvokeForm && (
-          <InvokeForm
-            functionName={functionName}
-            namespace={namespace}
-            submitting={invokeSubmitting}
-            setSubmitting={setInvokeSubmitting}
-            setShowForm={setShowInvokeForm}
-            form={invokeForm}
-            setForm={setInvokeForm}
-            invokeFunction={invokeFunction}
-            invokeResponse={invokeResponse}
-            setInvokeResponse={setInvokeResponse}
-          />
-        )}
-      </div>
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <div className="flex items-start justify-between">
+            <div>
+              <CardTitle className="text-2xl">{functionName}</CardTitle>
+              <CardDescription className="mt-2">
+                <Badge variant="secondary">{namespace}</Badge>
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <h3 className="text-sm font-medium text-muted-foreground mb-1">镜像</h3>
+            <code className="text-sm bg-muted px-2 py-1 rounded">{image}</code>
+          </div>
+
+          <Separator />
+
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => handleInvoke()} className="gap-2">
+              <Play className="h-4 w-4" />
+              调用函数
+            </Button>
+            <Button variant="outline" onClick={() => openUpdate()} className="gap-2">
+              <Edit className="h-4 w-4" />
+              更新
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => handleDelete(functionName, namespace)}
+              className="gap-2"
+            >
+              <Trash2 className="h-4 w-4" />
+              删除
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Output response={invokeResponse} />
+
+      {showUpdateForm && (
+        <Form
+          submitting={submitting}
+          setSubmitting={setSubmitting}
+          setShowForm={setShowUpdateForm}
+          form={form}
+          setForm={setForm}
+          deployFunction={updateFunction}
+          fetchList={fetchList}
+          updateFunction={updateFunction}
+          formType="update"
+        />
+      )}
+
+      {showInvokeForm && (
+        <InvokeForm
+          functionName={functionName}
+          namespace={namespace}
+          submitting={invokeSubmitting}
+          setSubmitting={setInvokeSubmitting}
+          setShowForm={setShowInvokeForm}
+          form={invokeForm}
+          setForm={setInvokeForm}
+          invokeFunction={invokeFunction}
+          invokeResponse={invokeResponse}
+          setInvokeResponse={setInvokeResponse}
+        />
+      )}
     </div>
   );
 }
