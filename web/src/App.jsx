@@ -10,7 +10,7 @@ function App() {
   const usernameRef = useRef("defaultUser");
 
   if (logined) {
-    return <Mainpage username={usernameRef.current}> </Mainpage>;
+    return <Mainpage username={usernameRef} setLogined={setLogined} />;
   }
 
   return (

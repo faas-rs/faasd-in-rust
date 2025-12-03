@@ -1,4 +1,4 @@
-import { useState ,useCallback} from "react";
+import { useState, useCallback } from "react";
 import { Form, InvokeForm } from "./form.jsx";
 import { Output } from "./output.jsx";
 import { useDebounce } from "./debounce.jsx";
@@ -30,7 +30,6 @@ export function FunctionInfo({
 }) {
   const [showUpdateForm, setShowUpdateForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [response, setResponse] = useState(null);
   const [form, setForm] = useState({
     functionName: functionName,
     namespace: namespace,
@@ -58,9 +57,9 @@ export function FunctionInfo({
   }
 
   const handleDelete = useDebounce(async (functionName, namespace) => {
-    const payload = { 
+    const payload = {
       functionName: functionName,
-      namespace: namespace
+      namespace: namespace,
     };
     console.log("deleting function with payload:", payload);
     await deleteFunction(payload);
@@ -80,7 +79,7 @@ export function FunctionInfo({
       <p>Function: {functionName}</p>
       <p>Namespace: {namespace}</p>
       <p>Image: {image}</p>
-      <button onClick={() => handleInvoke()}>Invoke</button>
+      <button className="px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-500 text-white rounded-full shadow-lg hover:shadow-xl active:scale-95 transition" onClick={() => handleInvoke()}>Invoke</button>
       <button onClick={() => handleDelete(functionName, namespace)}>
         Delete
       </button>
