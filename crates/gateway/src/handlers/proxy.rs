@@ -28,7 +28,10 @@ impl FromStr for ProxyQuery {
             .map(|(s, n)| (s.to_string(), Some(n.to_string())))
             .unwrap_or((identifier.to_string(), None));
         Ok(ProxyQuery {
-            query: Query { function_name, namespace },
+            query: Query {
+                function_name,
+                namespace,
+            },
             path: rest_path,
         })
     }

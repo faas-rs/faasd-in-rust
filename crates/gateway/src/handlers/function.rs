@@ -14,7 +14,10 @@ pub async fn deploy<P: Provider>(
 ) -> Result<HttpResponse, DeployError> {
     let function_name = info.0.function_name.clone();
     (*provider).deploy(info.0).await.map(|()| {
-        HttpResponse::Accepted().body(format!("function {} was created successfully", function_name))
+        HttpResponse::Accepted().body(format!(
+            "function {} was created successfully",
+            function_name
+        ))
     })
 }
 
@@ -24,7 +27,10 @@ pub async fn update<P: Provider>(
 ) -> Result<HttpResponse, UpdateError> {
     let function_name = info.0.function_name.clone();
     (*provider).update(info.0).await.map(|()| {
-        HttpResponse::Accepted().body(format!("function {} was updated successfully", function_name))
+        HttpResponse::Accepted().body(format!(
+            "function {} was updated successfully",
+            function_name
+        ))
     })
 }
 
@@ -37,10 +43,12 @@ pub async fn delete<P: Provider>(
         function_name: function_name.clone(),
         namespace: Some(info.0.namespace),
     };
-    (*provider)
-        .delete(query)
-        .await
-        .map(|()| HttpResponse::Ok().body(format!("function {} was deleted successfully", function_name)))
+    (*provider).delete(query).await.map(|()| {
+        HttpResponse::Ok().body(format!(
+            "function {} was deleted successfully",
+            function_name
+        ))
+    })
 }
 
 #[derive(Debug, Deserialize)]
