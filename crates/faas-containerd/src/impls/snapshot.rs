@@ -42,7 +42,7 @@ impl ContainerdService {
             .get_parent_snapshot(&container.image, &container.endpoint.namespace)
             .await?;
         self.do_prepare_snapshot(
-            &container.endpoint.service,
+            &container.endpoint.function_name,
             &container.endpoint.namespace,
             parent_snapshot,
         )
@@ -117,7 +117,7 @@ impl ContainerdService {
         let mut sc = self.client.snapshots();
         let req = RemoveSnapshotRequest {
             snapshotter: crate::consts::DEFAULT_SNAPSHOTTER.to_string(),
-            key: endpoint.service.clone(),
+            key: endpoint.function_name.clone(),
         };
         sc.remove(with_namespace!(req, endpoint.namespace))
             .await

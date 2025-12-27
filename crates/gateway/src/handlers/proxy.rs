@@ -23,12 +23,15 @@ impl FromStr for ProxyQuery {
         } else {
             (path, "".to_owned())
         };
-        let (service, namespace) = identifier
+        let (function_name, namespace) = identifier
             .rsplit_once('.')
             .map(|(s, n)| (s.to_string(), Some(n.to_string())))
             .unwrap_or((identifier.to_string(), None));
         Ok(ProxyQuery {
-            query: Query { service, namespace },
+            query: Query {
+                function_name,
+                namespace,
+            },
             path: rest_path,
         })
     }

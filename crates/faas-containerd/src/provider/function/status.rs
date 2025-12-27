@@ -45,7 +45,7 @@ impl ContainerdProvider {
 
         // 大部分字段并未实现，使用None填充
         let status = Status {
-            name: container.id,
+            function_name: container.id,
             namespace: Some(endpoint.namespace),
             image: container.image,
             env_process: None,

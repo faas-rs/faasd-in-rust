@@ -6,8 +6,8 @@ info:
     name: GPL-3.0
   version: 0.1.0
 servers:
-- url: "http://localhost:8080"
-  description: Local server
+  - url: "http://localhost:8080"
+    description: Local server
 tags:
   - name: internal
     description: Internal use only
@@ -62,13 +62,21 @@ paths:
       summary: Remove a deployed function.
       tags:
         - system
-      requestBody:
-        description: Function to delete
-        content:
-          application/json:
-            schema:
-              "$ref": "#/components/schemas/DeleteFunctionRequest"
-        required: true
+      parameters:
+        - name: function_name
+          in: query
+          description: Name of deployed function
+          required: true
+          schema:
+            type: string
+            example: nginx
+        - name: namespace
+          in: query
+          description: Optional namespace of the function
+          required: false
+          schema:
+            type: string
+            example: faasd-in-rs-fn
       responses:
         '200':
           description: OK
@@ -76,7 +84,29 @@ paths:
           description: Not Found
         '500':
           description: Internal Server Error
-  "/function/{function_name}":
+    put:
+      operationId: UpdateFunction
+      description: Update an existing function.
+      summary: Update an existing function.
+      tags:
+        - system
+      requestBody:
+        description: Function to update
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/FunctionDeployment"
+        required: true
+      responses:
+        '202':
+          description: Accepted
+        '400':
+          description: Bad Request
+        '404':
+          description: Not Found
+        '500':
+          description: Internal Server Error
+  "/function/{function_name_namespace}/{function_name}":
     post:
       operationId: InvokeFunction
       description: Invoke a function in the default namespace.
@@ -87,12 +117,20 @@ paths:
       tags:
         - function
       parameters:
-      - name: function_name
-        in: path
-        description: Function name
-        required: true
-        schema:
-          type: string
+        - name: function_name_namespace
+          in: path
+          description: Function name and namespace
+          required: true
+          schema:
+            type: string
+            example: echo.test
+        - name: function_name
+          in: path
+          description: function_name
+          required: true
+          schema:
+            type: string
+            example: echo
       requestBody:
         description: "(Optional) data to pass to function"
         content:
@@ -112,13 +150,87 @@ paths:
         '500':
           description: Internal server error
         '503':
-          description: Error Service Unavailable
+          description: Service Unavailable
+  "/auth/login":
+    post:
+      operationId: Login
+      description: Login to the system.
+      summary: Login to the system.
+      tags:
+        - internal
+      requestBody:
+        description: Credentials for login
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/Payload"
+        required: true
+      responses:
+        '200':
+          description: Successful login
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - token
+                  - token_type
+                properties:
+                  token:
+                    type: string
+                    description: JWT token for authenticated requests
+                    example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+                  token_type:
+                    type: string
+                    description: Type of the token
+                    example: Bearer
+        '400':
+          description: Bad Request
+        '401':
+          description: Unauthorized
+        '500':
+          description: Internal server error
+  "/auth/register":
+    post:
+      operationId: Register
+      description: Register a new user.
+      summary: Register a new user.
+      tags:
+        - internal
+      requestBody:
+        description: User information for registration
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/Payload"
+        required: true
+      responses:
+        '201':
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - message
+                  - user_id
+                properties:
+                  message:
+                    type: string
+                    example: User created successfully
+                  user_id:
+                    type: string
+                    example: "10086"
+        '409':
+          description: Conflict
+        '500':
+          description: Internal server error
 components:
   schemas:
     FunctionDeployment:
       required:
-      - function_name
-      - image
+        - function_name
+        - image
       type: object
       properties:
         function_name:
@@ -156,7 +268,7 @@ components:
             foo: bar
     DeleteFunctionRequest:
       required:
-      - function_name
+        - function_name
       type: object
       properties:
         function_name:
@@ -190,3 +302,17 @@ components:
           additionalProperties:
             type: string
           description: environment variables for the function runtime
+    Payload:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+          description: Username for authentication
+          example: admin
+        password:
+          type: string
+          description: Password for authentication
+          example: password123

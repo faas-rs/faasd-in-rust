@@ -24,7 +24,7 @@ impl ContainerdService {
         metadata: &ContainerStaticMetadata,
     ) -> Result<Container, ContainerError> {
         let container = Container {
-            id: metadata.endpoint.service.clone(),
+            id: metadata.endpoint.function_name.clone(),
             image: metadata.image.clone(),
             runtime: Some(Runtime {
                 name: "io.containerd.runc.v2".to_string(),
@@ -35,7 +35,7 @@ impl ContainerdService {
                 ContainerError::Internal
             })?),
             snapshotter: crate::consts::DEFAULT_SNAPSHOTTER.to_string(),
-            snapshot_key: metadata.endpoint.service.clone(),
+            snapshot_key: metadata.endpoint.function_name.clone(),
             ..Default::default()
         };
 
@@ -58,7 +58,7 @@ impl ContainerdService {
     /// 删除容器
     pub async fn delete_container(&self, endpoint: &Endpoint) -> Result<(), ContainerError> {
         let Endpoint {
-            service: cid,
+            function_name: cid,
             namespace: ns,
         } = endpoint;
         let mut cc = self.client.containers();
@@ -79,7 +79,7 @@ impl ContainerdService {
         let mut cc = self.client.containers();
 
         let request = GetContainerRequest {
-            id: endpoint.service.clone(),
+            id: endpoint.function_name.clone(),
         };
 
         let resp = cc

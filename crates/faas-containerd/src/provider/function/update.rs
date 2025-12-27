@@ -8,7 +8,7 @@ use crate::provider::ContainerdProvider;
 impl ContainerdProvider {
     pub(crate) async fn _update(&self, param: Deployment) -> Result<(), UpdateError> {
         let function = Query {
-            service: param.service.clone(),
+            function_name: param.function_name.clone(),
             namespace: param.namespace.clone(),
         };
         self._delete(function).await.map_err(|e| {

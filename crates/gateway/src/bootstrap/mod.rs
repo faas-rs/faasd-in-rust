@@ -139,7 +139,7 @@ mod tests {
         let meta = ProxyQuery::from_str(&any).unwrap();
         HttpResponse::Ok().body(format!(
             "{}|{}|{}",
-            meta.query.service,
+            meta.query.function_name,
             meta.query.namespace.unwrap_or_default(),
             meta.path
         ))

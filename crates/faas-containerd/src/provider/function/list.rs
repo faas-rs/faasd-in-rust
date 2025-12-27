@@ -18,7 +18,7 @@ impl ContainerdProvider {
         let mut statuses: Vec<Status> = Vec::new();
         for container in containers {
             let endpoint = Endpoint {
-                service: container.id.clone(),
+                function_name: container.id.clone(),
                 namespace: namespace.clone(),
             };
             let created_at = container.created_at.unwrap().to_string();
@@ -31,7 +31,13 @@ impl ContainerdProvider {
                         replicas = 1;
                     }
                 }
-                Err(TaskError::NotFound) => continue,
+                Err(TaskError::NotFound) => {
+                    log::info!(
+                        "task not found for endpoint {:?}, treating replicas=0",
+                        &endpoint
+                    );
+                    replicas = 0;
+                }
                 Err(e) => {
                     log::warn!(
                         "failed to get task for function {:?} because {:?}",
@@ -43,7 +49,7 @@ impl ContainerdProvider {
 
             // 大部分字段并未实现，使用None填充
             let status = Status {
-                name: endpoint.service,
+                function_name: endpoint.function_name,
                 namespace: Some(endpoint.namespace),
                 image: container.image,
                 env_process: None,

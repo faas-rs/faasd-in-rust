@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "camelCase")]
 pub struct Deployment {
     /// Service is the name of the function deployment
-    pub service: String,
+    pub function_name: String,
 
     /// Image is a fully-qualified container image
     pub image: String,
@@ -73,7 +73,7 @@ pub struct Usage {
 #[serde(rename_all = "camelCase")]
 pub struct Status {
     /// The name of the function
-    pub name: String,
+    pub function_name: String,
 
     /// The fully qualified docker image name of the function
     pub image: String,
@@ -128,7 +128,7 @@ pub struct Status {
 #[derive(Eq, Hash, PartialEq, Clone, Debug)]
 pub struct Query {
     /// Name of deployed function
-    pub service: String,
+    pub function_name: String,
 
     /// Namespace of deployed function
     pub namespace: Option<String>,
@@ -141,12 +141,12 @@ impl FromStr for Query {
     fn from_str(function_name: &str) -> Result<Self, Self::Err> {
         Ok(if let Some(index) = function_name.rfind('.') {
             Self {
-                service: function_name[..index].to_string(),
+                function_name: function_name[..index].to_string(),
                 namespace: Some(function_name[index + 1..].to_string()),
             }
         } else {
             Self {
-                service: function_name.to_string(),
+                function_name: function_name.to_string(),
                 namespace: Some("default".to_string()),
             }
         })
