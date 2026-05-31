@@ -1,37 +1,43 @@
-use faas_containerd::consts::DEFAULT_FAASDRS_DATA_DIR;
-use tokio::signal::unix::{SignalKind, signal};
+//! faas-containerd entry point — asupersync runtime.
+//!
+//! Boots the asupersync Runtime, initializes the containerd gRPC backend,
+//! runs startup reconciliation, and serves the gateway HTTP server.
 
-#[tokio::main]
-async fn main() -> std::io::Result<()> {
+use faas_containerd::consts::DEFAULT_FAASDRS_DATA_DIR;
+use faas_containerd::state::reconcile::Reconciler;
+
+fn main() {
     dotenv::dotenv().ok();
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
-    faas_containerd::init_backend().await;
-    let provider = faas_containerd::provider::ContainerdProvider::new(DEFAULT_FAASDRS_DATA_DIR);
 
-    // leave for shutdown containers (stop tasks)
-    let _handle = provider.clone();
+    let rt = asupersync::runtime::RuntimeBuilder::new()
+        .worker_threads(4)
+        .build()
+        .expect("Failed to build asupersync runtime");
 
-    tokio::spawn(async move {
-        log::info!("Setting up signal handlers for graceful shutdown");
-        let mut sigint = signal(SignalKind::interrupt()).unwrap();
-        let mut sigterm = signal(SignalKind::terminate()).unwrap();
-        let mut sigquit = signal(SignalKind::quit()).unwrap();
-        tokio::select! {
-            _ = sigint.recv() => log::info!("SIGINT received, starting graceful shutdown..."),
-            _ = sigterm.recv() => log::info!("SIGTERM received, starting graceful shutdown..."),
-            _ = sigquit.recv() => log::info!("SIGQUIT received, starting graceful shutdown..."),
-        }
-        // for (_q, ctr) in handle.ctr_instance_map.lock().await.drain() {
-        //     let _ = ctr.delete().await;
-        // }
-        log::info!("Successfully shutdown all containers");
-    });
+    let handle = rt.handle();
 
-    gateway::bootstrap::serve(provider)
-        .await
-        .unwrap_or_else(|e| {
-            log::error!("Failed to start server: {}", e);
+    rt.block_on(async move {
+        // ── Init containerd backend ─────────────────────────────────
+        faas_containerd::init_backend(handle.clone());
+
+        // ── Init provider ───────────────────────────────────────────
+        let provider =
+            faas_containerd::provider::ContainerdProvider::new(DEFAULT_FAASDRS_DATA_DIR);
+
+        // ── Startup reconciliation ──────────────────────────────────
+        let reconciler = Reconciler::new(provider.state_store.clone());
+        reconciler.reconcile_all().await;
+
+        // ── Start HTTP gateway ──────────────────────────────────────
+        let port: u16 = std::env::var("PORT")
+            .ok()
+            .and_then(|p| p.parse().ok())
+            .unwrap_or(8080);
+
+        if let Err(e) = gateway::serve(provider, port, &handle).await {
+            log::error!("Gateway server error: {e}");
             std::process::exit(1);
-        })
-        .await
+        }
+    });
 }

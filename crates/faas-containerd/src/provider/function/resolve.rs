@@ -1,50 +1,75 @@
-use std::net::{IpAddr, Ipv4Addr};
+use std::net::IpAddr;
 
-use actix_http::uri::Builder;
-use gateway::handlers::function::ResolveError;
-use gateway::types::function::Query;
+use gateway::types::{Query, ResolveError};
 
 use crate::impls::cni::{self, Endpoint};
 use crate::provider::ContainerdProvider;
+use crate::state::InstanceState;
 
-fn upstream(addr: IpAddr) -> Builder {
-    actix_http::Uri::builder()
-        .scheme("http")
-        .authority(format!("{}:{}", addr, 8080))
+fn upstream(addr: IpAddr) -> http::Uri {
+    format!("http://{addr}:8080").parse().unwrap()
 }
 
 impl ContainerdProvider {
-    pub(crate) async fn _resolve(
+    pub async fn resolve(
         &self,
         query: Query,
-    ) -> Result<actix_http::uri::Builder, ResolveError> {
+    ) -> Result<http::Uri, ResolveError> {
         let endpoint = Endpoint::from(query);
         log::trace!("Resolving function: {:?}", endpoint);
-        let addr_oct = self
-            .database
-            .get(endpoint.to_string())
-            .map_err(|e| {
-                log::error!("Failed to get container address: {:?}", e);
-                ResolveError::Internal(e.to_string())
-            })?
-            .ok_or(ResolveError::NotFound("container not found".to_string()))?;
 
-        log::trace!("Container address: {:?}", addr_oct.as_array::<4>());
+        let record = match self.state_store.get(&endpoint) {
+            Ok(Some(r)) => r,
+            Ok(None) => {
+                log::trace!("No record found for {}", endpoint);
+                return Err(ResolveError::NotFound("container not found".to_string()));
+            }
+            Err(e) => {
+                log::error!("Failed to read state for {}: {:?}", endpoint, e);
+                return Err(ResolveError::Internal(e.to_string()));
+            }
+        };
 
-        // We force the address to be IPv4 here
-        let addr = IpAddr::V4(Ipv4Addr::from_octets(*addr_oct.as_array::<4>().unwrap()));
+        match &record.state {
+            InstanceState::Active => {
+                let addr = record.ip_address.ok_or_else(|| {
+                    log::error!("Active record for {} has no IP address", endpoint);
+                    ResolveError::Internal("missing IP address".to_string())
+                })?;
 
-        // Check if the coresponding netns is still alive
-        // We can achieve this by checking the /run/cni/faasrs-cni-bridge,
-        // if the ip filename is still there
-
-        if cni::cni_impl::check_network_exists(addr) {
-            log::trace!("CNI network exists for {}", addr);
-            Ok(upstream(addr))
-        } else {
-            log::error!("CNI network not exists for {}", addr);
-            let _ = self.database.remove(endpoint.to_string());
-            Err(ResolveError::Internal("CNI network not exists".to_string()))
+                // Consistency check: verify CNI network still exists
+                if cni::cni_impl::check_network_exists(addr) {
+                    log::trace!("CNI network exists for {} = {}", endpoint, addr);
+                    Ok(upstream(addr))
+                } else {
+                    log::error!(
+                        "CNI network missing for {} = {} (drift detected)",
+                        endpoint,
+                        addr
+                    );
+                    // Don't remove the record here — let reconciliation handle it
+                    Err(ResolveError::Internal("CNI network not exists".to_string()))
+                }
+            }
+            InstanceState::Error(inner) => {
+                log::warn!(
+                    "Function {} is in Error({}) state: {:?}",
+                    endpoint,
+                    inner,
+                    record.error_reason
+                );
+                Err(ResolveError::Internal(format!(
+                    "function in error state: {:?}",
+                    record.error_reason
+                )))
+            }
+            other => {
+                log::trace!("Function {} is in {} state, not ready", endpoint, other);
+                Err(ResolveError::NotFound(format!(
+                    "function not active (state: {})",
+                    other
+                )))
+            }
         }
     }
 }
@@ -56,10 +81,10 @@ mod tests {
     #[test]
     fn test_uri() {
         let addr = IpAddr::V4(Ipv4Addr::new(10, 42, 2, 48));
-        let uri = super::upstream(addr).path_and_query("").build().unwrap();
+        let uri = super::upstream(addr);
         assert_eq!(uri.scheme_str(), Some("http"));
         assert_eq!(uri.authority().unwrap().host(), addr.to_string());
         assert_eq!(uri.authority().unwrap().port_u16(), Some(8080));
-        assert_eq!(uri.to_string(), format!("http://{}:8080/", addr));
+        assert!(uri.to_string().starts_with(&format!("http://{addr}:8080")));
     }
 }

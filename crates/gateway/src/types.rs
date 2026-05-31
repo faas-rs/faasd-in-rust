@@ -1,8 +1,73 @@
-// https://github.com/openfaas/faas/blob/7803ea1861f2a22adcbcfa8c79ed539bc6506d5b/api-docs/spec.openapi.yml
-
 use std::{collections::HashMap, str::FromStr};
 
+use derive_more::Display;
 use serde::{Deserialize, Serialize};
+
+// ── Error types (from gateway::handlers::function) ──────────────
+
+#[derive(Debug, Display)]
+pub enum DeployError {
+    #[display("Invalid: {}", _0)]
+    Invalid(String),
+    #[display("Internal: {}", _0)]
+    Internal(String),
+}
+
+#[derive(Debug, Display)]
+pub enum DeleteError {
+    #[display("Invalid: {}", _0)]
+    Invalid(String),
+    #[display("NotFound: {}", _0)]
+    NotFound(String),
+    #[display("Internal: {}", _0)]
+    Internal(String),
+}
+
+#[derive(Debug, Display)]
+pub enum ResolveError {
+    #[display("NotFound: {}", _0)]
+    NotFound(String),
+    #[display("Invalid: {}", _0)]
+    Invalid(String),
+    #[display("Internal: {}", _0)]
+    Internal(String),
+}
+
+#[derive(Debug, Display)]
+pub enum ListError {
+    #[display("Internal: {}", _0)]
+    Internal(String),
+    #[display("NotFound: {}", _0)]
+    NotFound(String),
+}
+
+#[derive(Debug, Display)]
+pub enum UpdateError {
+    #[display("Invalid: {}", _0)]
+    Invalid(String),
+    #[display("Internal: {}", _0)]
+    Internal(String),
+    #[display("NotFound: {}", _0)]
+    NotFound(String),
+}
+
+// ── Error type (from gateway::handlers::namespace) ──────────────
+
+#[derive(Debug, Display)]
+pub enum NamespaceError {
+    #[display("Invalid: {}", _0)]
+    Invalid(String),
+    #[display("AlreadyExists: {}", _0)]
+    AlreadyExists(String),
+    #[display("NotFound: {}", _0)]
+    NotFound(String),
+    #[display("Internal: {}", _0)]
+    Internal(String),
+    #[display("MethodNotAllowed: {}", _0)]
+    MethodNotAllowed(String),
+}
+
+// ── Domain types (from gateway::types::function) ────────────────
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -161,6 +226,14 @@ pub struct Delete {
     pub namespace: String,
 }
 
-const fn default_read_only_root_filesystem() -> bool {
+pub const fn default_read_only_root_filesystem() -> bool {
     false
+}
+
+// ── Domain type (from gateway::types::namespace) ────────────────
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Namespace {
+    pub name: Option<String>,
+    pub labels: HashMap<String, String>,
 }

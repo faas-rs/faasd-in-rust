@@ -1,4 +1,4 @@
-use gateway::types::function;
+use gateway::types;
 
 use crate::consts;
 
@@ -10,8 +10,8 @@ pub struct ContainerStaticMetadata {
     pub endpoint: Endpoint,
 }
 
-impl From<function::Deployment> for ContainerStaticMetadata {
-    fn from(info: function::Deployment) -> Self {
+impl From<types::Deployment> for ContainerStaticMetadata {
+    fn from(info: types::Deployment) -> Self {
         ContainerStaticMetadata {
             image: info.image,
             endpoint: Endpoint::new(
@@ -24,9 +24,9 @@ impl From<function::Deployment> for ContainerStaticMetadata {
     }
 }
 
-// impl From<ContainerStaticMetadata> for function::Query {
+// impl From<ContainerStaticMetadata> for types::Query {
 //     fn from(metadata: ContainerStaticMetadata) -> Self {
-//         function::Query {
+//         types::Query {
 //             service: metadata.container_id,
 //             namespace: Some(metadata.namespace),
 //         }

@@ -1,4 +1,4 @@
-use gateway::{handlers::function::ListError, types::function::Status};
+use gateway::types::{ListError, Status};
 
 use crate::{
     impls::{backend, cni::Endpoint, task::TaskError},
@@ -6,7 +6,7 @@ use crate::{
 };
 
 impl ContainerdProvider {
-    pub(crate) async fn _list(&self, namespace: String) -> Result<Vec<Status>, ListError> {
+    pub async fn list(&self, namespace: String) -> Result<Vec<Status>, ListError> {
         let containers = backend().list_container(&namespace).await.map_err(|e| {
             log::error!(
                 "failed to get container list for namespace {} because {:?}",

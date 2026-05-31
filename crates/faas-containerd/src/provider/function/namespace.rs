@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use gateway::{handlers::namespace::NamespaceError, types::namespace::Namespace};
+use gateway::types::{Namespace, NamespaceError};
 
 use crate::{
     impls::{backend, namespace::NamespaceServiceError},
@@ -8,7 +8,7 @@ use crate::{
 };
 
 impl ContainerdProvider {
-    pub(crate) async fn _create_namespace(
+    pub async fn create_namespace(
         &self,
         namespace: String,
         labels: HashMap<String, String>,
@@ -25,7 +25,7 @@ impl ContainerdProvider {
             })
     }
 
-    pub(crate) async fn _get_namespace(
+    pub async fn get_namespace(
         &self,
         namespace: String,
     ) -> Result<Namespace, NamespaceError> {
@@ -46,7 +46,7 @@ impl ContainerdProvider {
         })
     }
 
-    pub(crate) async fn _namespace_list(&self) -> Result<Vec<Namespace>, NamespaceError> {
+    pub async fn namespace_list(&self) -> Result<Vec<Namespace>, NamespaceError> {
         let ns_list = backend()
             .list_namespace()
             .await
@@ -61,7 +61,7 @@ impl ContainerdProvider {
         Ok(ns_list_result)
     }
 
-    pub(crate) async fn _delete_namespace(&self, namespace: String) -> Result<(), NamespaceError> {
+    pub async fn delete_namespace(&self, namespace: String) -> Result<(), NamespaceError> {
         backend()
             .delete_namespace(&namespace)
             .await
@@ -73,7 +73,7 @@ impl ContainerdProvider {
             })
     }
 
-    pub(crate) async fn _update_namespace(
+    pub async fn update_namespace(
         &self,
         namespace: String,
         labels: HashMap<String, String>,

@@ -5,9 +5,10 @@ mod command;
 mod util;
 
 pub use cni_impl::init_cni_network;
-use gateway::types::function::Query;
+use gateway::types::Query;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Endpoint {
     pub function_name: String,
     pub namespace: String,

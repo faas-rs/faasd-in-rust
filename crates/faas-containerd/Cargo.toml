@@ -5,32 +5,31 @@ edition = "2024"
 
 [dependencies]
 containerd-client = "0.8"
-futures = "0.3"
-tokio = { version = "1", features = ["full"] }
-tonic = "0.12"
+tonic = { version = "0.12", default-features = false, features = ["channel", "codegen", "prost"] }
+asupersync = "0.2.5"
+hyper = "1"
+gateway = { path = "../gateway" }
+http = "1"
+tower = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-scopeguard = "1.2.0"
 log = "0.4"
 env_logger = "0.10"
 prost-types = "0.13.4"
 oci-spec = "0.6"
 sha2 = "0.10"
 hex = "0.4"
-my-workspace-hack = { version = "0.1", path = "../my-workspace-hack" }
-gateway = { path = "../gateway" }
 handlebars = "4.1.0"
-tokio-util = { version = "0.7.15", features = ["full"] }
 container_image_dist_ref = "0.3.0"
 url = "2.4"
 chrono = { version = "0.4", features = ["serde"] }
 dotenv = "0.15.0"
 derive_more = { version = "2", features = ["full"] }
 cidr = "0.3.1"
-async-safe-defer = "0.1.2"
-actix-http = "*"
 netns-rs = "0.1.0"
 sled = "0.34.7"
+bitflags = { version = "2.8", features = ["serde"] }
+thiserror = "2"
 
 [dev-dependencies]
-actix-web = "4.11.0"
+tempfile = "3"

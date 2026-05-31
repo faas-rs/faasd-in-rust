@@ -1,7 +1,4 @@
-use gateway::{
-    handlers::function::ResolveError,
-    types::function::{Query, Status},
-};
+use gateway::types::{Query, ResolveError, Status};
 
 use crate::{
     impls::{backend, cni::Endpoint, container::ContainerError},
@@ -9,7 +6,7 @@ use crate::{
 };
 
 impl ContainerdProvider {
-    pub(crate) async fn _status(&self, function: Query) -> Result<Status, ResolveError> {
+    pub async fn status(&self, function: Query) -> Result<Status, ResolveError> {
         let endpoint: Endpoint = function.into();
         let container = backend().load_container(&endpoint).await.map_err(|e| {
             log::error!(

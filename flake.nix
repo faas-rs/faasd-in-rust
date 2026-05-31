@@ -62,7 +62,6 @@
             ./Cargo.lock
             (craneLib.fileset.commonCargoSources ./crates/faas-containerd)
             (craneLib.fileset.commonCargoSources ./crates/gateway)
-            (craneLib.fileset.commonCargoSources ./crates/my-workspace-hack)
             (craneLib.fileset.commonCargoSources crate)
           ];
         };
@@ -108,23 +107,6 @@
             cargoNextestPartitionsExtraArgs = "--no-tests=pass";
           });
 
-          # Ensure that cargo-hakari is up to date
-          hakari = craneLib.mkCargoDerivation {
-            inherit src;
-            pname = "my-workspace-hack";
-            cargoArtifacts = null;
-            doInstallCargoArtifacts = false;
-
-            buildPhaseCargoCommand = ''
-              cargo hakari generate --diff  # workspace-hack Cargo.toml is up-to-date
-              cargo hakari manage-deps --dry-run  # all workspace crates depend on workspace-hack
-              cargo hakari verify
-            '';
-
-            nativeBuildInputs = [
-              pkgs.cargo-hakari
-            ];
-          };
         };
 
         packages.default = faas-rs-crate;
@@ -144,7 +126,6 @@
           inputsFrom = [ faas-rs-crate ];
 
           packages = [
-            pkgs.cargo-hakari
             pkgs.containerd
             pkgs.runc
             pkgs.diesel-cli

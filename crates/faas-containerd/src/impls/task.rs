@@ -1,4 +1,3 @@
-use std::time::Duration;
 
 use containerd_client::{
     services::v1::{
@@ -9,7 +8,7 @@ use containerd_client::{
     with_namespace,
 };
 use derive_more::Display;
-use gateway::handlers::function::{DeleteError, DeployError};
+use gateway::types::{DeleteError, DeployError};
 use tonic::Request;
 
 use super::{ContainerdService, cni::Endpoint};
@@ -40,7 +39,7 @@ impl From<TaskError> for DeployError {
     fn from(e: TaskError) -> DeployError {
         match e {
             TaskError::InvalidArgument => DeployError::Invalid(e.to_string()),
-            _ => DeployError::InternalError(e.to_string()),
+            _ => DeployError::Internal(e.to_string()),
         }
     }
 }
@@ -142,6 +141,7 @@ impl ContainerdService {
         Ok(())
     }
 
+    #[allow(dead_code)]
     async fn do_kill_task_force(&self, cid: &str, ns: &str) -> Result<(), TaskError> {
         let mut c = self.client.tasks();
         let kill_request = KillRequest {
@@ -182,27 +182,16 @@ impl ContainerdService {
             function_name: cid,
             namespace: ns,
         } = endpoint;
-        let kill_timeout = Duration::from_secs(5);
         let wait_future = self.do_wait_task(cid, ns);
         self.do_kill_task(cid, ns).await?;
-        match tokio::time::timeout(kill_timeout, wait_future).await {
-            Ok(Ok(_)) => {
-                // 正常退出，尝试删除任务
+        match wait_future.await {
+            Ok(_) => {
                 self.do_delete_task(cid, ns).await?;
             }
-            Ok(Err(e)) => {
+            Err(e) => {
                 // wait 报错
                 log::error!("Error while waiting for task {}: {:?}", cid, e);
                 return Err(e);
-            }
-            Err(_) => {
-                // 超时，强制 kill
-                log::warn!("Task {} did not exit in time, sending SIGKILL", cid);
-                self.do_kill_task_force(cid, ns).await?;
-                // 尝试删除任务
-                if let Err(e) = self.do_delete_task(cid, ns).await {
-                    log::error!("Failed to delete task {} after SIGKILL: {:?}", cid, e);
-                }
             }
         }
         Ok(())
