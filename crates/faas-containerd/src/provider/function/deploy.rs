@@ -13,6 +13,14 @@ impl ContainerdProvider {
         let ns = &config.namespace;
         let container_name = format!("faasdrs-{}-{}", ns, config.function_name);
 
+        // Reject if already deployed — update path clears cache first via delete
+        if self.cache.get_ip(&container_name)
+            .map_err(|e| DeployError::Internal(e.to_string()))?
+            .is_some()
+        {
+            return Err(DeployError::Conflict("function already exists".into()));
+        }
+
         // CAS lock
         if !self.cache.try_acquire_deploy(&container_name)
             .map_err(|e| DeployError::Internal(e.to_string()))?
