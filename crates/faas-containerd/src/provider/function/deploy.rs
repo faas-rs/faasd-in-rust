@@ -2,7 +2,6 @@ use bollard::container::{
     CreateContainerOptions, InspectContainerOptions, RemoveContainerOptions, StartContainerOptions,
 };
 use bollard::image::CreateImageOptions;
-use bollard::models::HostConfig;
 use futures_util::TryStreamExt;
 use gateway::types::{DeployError, Deployment};
 use crate::provider::ContainerdProvider;
@@ -57,8 +56,13 @@ impl ContainerdProvider {
         tracing::debug!("image pulled");
 
         // Create host config with network
-        let host_config = HostConfig {
+        let host_config = bollard::models::HostConfig {
             network_mode: Some(self.network.clone()),
+            readonly_rootfs: Some(true),
+            tmpfs: Some(std::collections::HashMap::from([
+                ("/tmp".into(), "rw,noexec,nosuid,size=64m".into()),
+            ])),
+            cap_drop: Some(vec!["ALL".into()]),
             ..Default::default()
         };
         let env_vars: Vec<String> = c.env_vars.iter()
