@@ -57,11 +57,9 @@ fn cni_conf(name: &str, bridge: &str, subnet: &str, data_dir: &str) -> String {
     )
 }
 
-#[allow(dead_code)]
 pub(super) struct CniConfFile {
     pub conf_dir: PathBuf,
     pub conf_filename: String,
-    pub data_dir: PathBuf,
 }
 
 impl CniConfFile {
@@ -83,11 +81,10 @@ impl CniConfFile {
         let net_config = conf_dir.join(conf_filename);
         File::create(&net_config)?
             .write_all(cni_conf(net_name, bridge, subnet, data_dir).as_bytes())?;
-        let data_dir = PathBuf::from(data_dir);
+
         Ok(Self {
             conf_dir: conf_dir.to_path_buf(),
             conf_filename: conf_filename.to_string(),
-            data_dir: data_dir.join(net_name),
         })
     }
 }
