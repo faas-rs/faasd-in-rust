@@ -65,7 +65,7 @@ impl ContainerdProvider {
             ..Default::default()
         };
 
-        // Remove existing container if any (idempotent)
+        // Remove existing container if any — deploy is "ensure running with this config"
         if self.container_exists(name).await {
             self.docker.remove_container(name, Some(RemoveContainerOptions { force: true, ..Default::default() }))
                 .await.map_err(|e| DeployError::Internal(e.to_string()))?;
