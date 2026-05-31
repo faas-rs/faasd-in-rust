@@ -22,8 +22,7 @@ fn main() {
         faas_containerd::init_backend(handle.clone());
 
         // ── Init provider ───────────────────────────────────────────
-        let provider =
-            faas_containerd::provider::ContainerdProvider::new(DEFAULT_FAASDRS_DATA_DIR);
+        let provider = faas_containerd::provider::ContainerdProvider::new(DEFAULT_FAASDRS_DATA_DIR);
 
         // ── Start HTTP gateway ──────────────────────────────────────
         let port: u16 = std::env::var("PORT")

@@ -101,9 +101,7 @@ impl ContainerdService {
     /// 获取容器列表
     pub async fn list_container(&self, namespace: &str) -> Result<Vec<Container>, ContainerError> {
         let mut cc = self.client.containers();
-        let request = ListContainersRequest {
-            filters: vec![],
-        };
+        let request = ListContainersRequest { filters: vec![] };
         let resp = cc
             .list(with_namespace!(request, namespace))
             .await

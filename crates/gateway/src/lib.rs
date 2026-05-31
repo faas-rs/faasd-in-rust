@@ -12,7 +12,11 @@ use asupersync::runtime::RuntimeHandle;
 use serde::Deserialize;
 
 /// Start the gateway HTTP server dispatching to the given provider.
-pub async fn serve<P: Provider>(provider: Arc<P>, port: u16, handle: &RuntimeHandle) -> std::io::Result<()> {
+pub async fn serve<P: Provider>(
+    provider: Arc<P>,
+    port: u16,
+    handle: &RuntimeHandle,
+) -> std::io::Result<()> {
     let addr = format!("0.0.0.0:{port}");
     log::info!("Starting gateway on {addr}");
 
@@ -227,7 +231,11 @@ fn url_decode(s: &str) -> String {
             i += 3;
             continue;
         }
-        out.push(if bytes[i] == b'+' { ' ' } else { bytes[i] as char });
+        out.push(if bytes[i] == b'+' {
+            ' '
+        } else {
+            bytes[i] as char
+        });
         i += 1;
     }
     out

@@ -146,11 +146,7 @@ impl ContainerdService {
         Ok(())
     }
 
-    async fn do_wait_task(
-        &self,
-        cid: &str,
-        ns: &str,
-    ) -> Result<WaitResponse, TaskError> {
+    async fn do_wait_task(&self, cid: &str, ns: &str) -> Result<WaitResponse, TaskError> {
         let mut tc = self.client.tasks();
         let req = WaitRequest {
             container_id: cid.to_string(),

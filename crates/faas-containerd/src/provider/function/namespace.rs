@@ -25,10 +25,7 @@ impl ContainerdProvider {
             })
     }
 
-    pub async fn get_namespace(
-        &self,
-        namespace: String,
-    ) -> Result<Namespace, NamespaceError> {
+    pub async fn get_namespace(&self, namespace: String) -> Result<Namespace, NamespaceError> {
         let exist = backend()
             .namespace_exist(&namespace)
             .await

@@ -86,10 +86,7 @@ impl<T: AsyncWrite + Unpin> rt::Write for HyperAdapter<T> {
         AsyncWrite::poll_write(Pin::new(&mut self.inner), cx, buf)
     }
 
-    fn poll_flush(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<(), io::Error>> {
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         AsyncWrite::poll_flush(Pin::new(&mut self.inner), cx)
     }
 
@@ -133,10 +130,7 @@ impl tower::Service<Uri> for UnixConnector {
 
 /// Build a tonic `Channel` connected to a Unix socket, using asupersync
 /// for all I/O and task spawning.
-pub fn connect_channel(
-    handle: RuntimeHandle,
-    socket_path: &str,
-) -> tonic::transport::Channel {
+pub fn connect_channel(handle: RuntimeHandle, socket_path: &str) -> tonic::transport::Channel {
     tonic::transport::Endpoint::from_static("http://containerd")
         .executor(AsupersyncExecutor { handle })
         .connect_with_connector_lazy(UnixConnector {

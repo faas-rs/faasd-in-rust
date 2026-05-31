@@ -21,9 +21,11 @@ impl ContainerdProvider {
         let endpoint = &metadata.endpoint;
 
         // ── Acquire deploy lock ────────────────────────────────────
-        if !self.cache.try_acquire_deploy(endpoint).map_err(|e| {
-            DeployError::Internal(e.to_string())
-        })? {
+        if !self
+            .cache
+            .try_acquire_deploy(endpoint)
+            .map_err(|e| DeployError::Internal(e.to_string()))?
+        {
             return Err(DeployError::Conflict(
                 "function is being deployed or deleted".into(),
             ));
@@ -39,10 +41,13 @@ impl ContainerdProvider {
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap()
                     .as_millis() as u64;
-                let _ = self.cache.commit_deploy(endpoint, &CacheRecord {
-                    ip: *ip_addr,
-                    created_at: now,
-                });
+                let _ = self.cache.commit_deploy(
+                    endpoint,
+                    &CacheRecord {
+                        ip: *ip_addr,
+                        created_at: now,
+                    },
+                );
                 log::info!("Function {} deployed at {}", endpoint, ip_addr);
             }
             Err(_) => {

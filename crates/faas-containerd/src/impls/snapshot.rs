@@ -40,9 +40,7 @@ impl ContainerdService {
     ) -> Result<Vec<Mount>, ContainerdError> {
         let cid = container.endpoint.to_string();
         let ns = &container.endpoint.namespace;
-        let parent_snapshot = self
-            .get_parent_snapshot(&container.image, ns)
-            .await?;
+        let parent_snapshot = self.get_parent_snapshot(&container.image, ns).await?;
         self.do_prepare_snapshot(&cid, ns, parent_snapshot).await
     }
 
@@ -95,7 +93,9 @@ impl ContainerdService {
             .into_inner();
 
         let mut infos: Vec<containerd_client::services::v1::snapshots::Info> = Vec::new();
-        while let Some(msg) = stream.message().await
+        while let Some(msg) = stream
+            .message()
+            .await
             .map_err(|e| ContainerdError::GetParentSnapshotError(e.to_string()))?
         {
             infos.extend(msg.info);

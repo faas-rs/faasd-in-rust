@@ -54,7 +54,9 @@ pub fn create_cni_network(
         Ok(o) => o,
         Err(e) => {
             net_ns.remove().ok();
-            return Err(NetworkError { msg: format!("Failed to add CNI bridge: {e}") });
+            return Err(NetworkError {
+                msg: format!("Failed to add CNI bridge: {e}"),
+            });
         }
     };
 
@@ -74,7 +76,9 @@ pub fn create_cni_network(
         Err(e) => {
             let _ = cmd::cni_del_bridge(net_ns.path(), DEFAULT_NETWORK_NAME);
             net_ns.remove().ok();
-            return Err(NetworkError { msg: format!("Failed to parse CNI JSON: {e}") });
+            return Err(NetworkError {
+                msg: format!("Failed to parse CNI JSON: {e}"),
+            });
         }
     };
 
@@ -99,17 +103,14 @@ pub fn create_cni_network(
         }
     };
 
-        if ip_list.len() > 1 {
-            log::warn!("Multiple IP addresses in CNI output: {:?}", ip_list);
-        }
-        log::trace!("CNI network created with IP: {:?}", ip_list[0]);
-        Ok((ip_list[0], net_ns))
+    if ip_list.len() > 1 {
+        log::warn!("Multiple IP addresses in CNI output: {:?}", ip_list);
+    }
+    log::trace!("CNI network created with IP: {:?}", ip_list[0]);
+    Ok((ip_list[0], net_ns))
 }
 
-pub fn delete_cni_network(
-    cx: &asupersync::Cx,
-    endpoint: &Endpoint,
-) -> Result<(), NetworkError> {
+pub fn delete_cni_network(cx: &asupersync::Cx, endpoint: &Endpoint) -> Result<(), NetworkError> {
     cx.checkpoint().ok();
     cx.trace("cni:deleting");
 
@@ -118,9 +119,8 @@ pub fn delete_cni_network(
             let e1 = cmd::cni_del_bridge(ns.path(), DEFAULT_NETWORK_NAME);
             let e2 = ns.remove();
             if e1.is_err() || e2.is_err() {
-                let msg = format!(
-                    "NetNS exists but cleanup failed: cni_bridge={e1:?}, netns={e2:?}"
-                );
+                let msg =
+                    format!("NetNS exists but cleanup failed: cni_bridge={e1:?}, netns={e2:?}");
                 log::error!("{msg}");
                 return Err(NetworkError { msg });
             }

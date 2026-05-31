@@ -98,9 +98,8 @@ impl CacheStore {
         record: &CacheRecord,
     ) -> Result<bool, CacheStoreError> {
         let mut val = vec![TAG_CACHED];
-        serde_json::to_writer(&mut val, record).map_err(|e| {
-            CacheStoreError::Sled(e.to_string())
-        })?;
+        serde_json::to_writer(&mut val, record)
+            .map_err(|e| CacheStoreError::Sled(e.to_string()))?;
 
         match self.db.compare_and_swap(
             endpoint.to_string(),
