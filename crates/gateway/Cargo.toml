@@ -5,28 +5,10 @@ version.workspace = true
 authors.workspace = true
 
 [dependencies]
-actix-web = "4.11.0"
+axum = "0.8"
+http = "1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-tokio = { version = "1.37.0", features = ["full"] }
-actix-web-httpauth = "0.6"
-thiserror = "1.0"
-awc = "3.6.0"
-prometheus = "0.13"
-base64 = "0.13"
-log = "0.4.27"
-my-workspace-hack = { version = "0.1", path = "../my-workspace-hack" }
-url = "2.4"
-derive_more = { version = "2", features = ["full"] }
-tonic = "0.12"
-tokio-util = "*"
-actix-http = "*"
-chrono = {version ="0.4.41",features= ["serde"]}
-rand = "0.9.1"
-futures-util = "0.3"
-uuid = {version="1.0",features = ["v4","serde"]}
-diesel = { version = "2.1.0", features = ["postgres","uuid","chrono","r2d2"] }
-diesel-async = { version = "0.5.2", features = ["postgres","bb8","pool"] }
-jsonwebtoken = "9.3.1"
-argon2 = "0.5.3"
-oauth2 ="5.0.0"
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+async-trait = "0.1"

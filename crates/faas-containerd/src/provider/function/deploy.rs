@@ -1,95 +1,100 @@
-use crate::impls::cni;
-use crate::impls::{self, backend, function::ContainerStaticMetadata};
+use bollard::container::{
+    CreateContainerOptions, InspectContainerOptions, RemoveContainerOptions, StartContainerOptions,
+};
+use bollard::image::CreateImageOptions;
+use bollard::models::HostConfig;
+use futures_util::TryStreamExt;
+use gateway::types::{DeployError, Deployment};
 use crate::provider::ContainerdProvider;
-use gateway::handlers::function::DeployError;
-use gateway::types::function::Deployment;
-use scopeguard::{ScopeGuard, guard};
+use crate::state::CacheRecord;
 
 impl ContainerdProvider {
-    pub(crate) async fn _deploy(&self, config: Deployment) -> Result<(), DeployError> {
-        let metadata = ContainerStaticMetadata::from(config);
-        log::trace!("Deploying function: {:?}", metadata);
+    pub async fn function_deploy(&self, config: Deployment) -> Result<(), DeployError> {
+        let ns = &config.namespace;
+        let container_name = format!("faasdrs-{}-{}", ns, config.function_name);
 
-        // not going to check the conflict of namespace, should be handled by containerd backend
-        backend()
-            .prepare_image(&metadata.image, &metadata.endpoint.namespace, true)
-            .await
-            .map_err(|img_err| {
-                use impls::oci_image::ImageError;
-                log::error!("Image '{}' fetch failed: {}", &metadata.image, img_err);
-                match img_err {
-                    ImageError::ImageNotFound(e) => DeployError::Invalid(e.to_string()),
-                    _ => DeployError::InternalError(img_err.to_string()),
-                }
-            })?;
-        log::trace!("Image '{}' fetch ok", &metadata.image);
-
-        let _ = backend().create_container(&metadata).await.map_err(|e| {
-            log::error!("Failed to create container: {:?}", e);
-            DeployError::InternalError(e.to_string())
-        })?;
-
-        let container_defer = scopeguard::guard((), |()| {
-            let endpoint = metadata.endpoint.clone();
-            tokio::spawn(async move { backend().delete_container(&endpoint).await });
-        });
-
-        // let network = CNIEndpoint::new(&metadata.container_id, &metadata.namespace)?;
-        let (ip, netns) = cni::cni_impl::create_cni_network(&metadata.endpoint).map_err(|e| {
-            log::error!("Failed to create CNI network: {}", e);
-            DeployError::InternalError(e.to_string())
-        })?;
-
-        let netns_defer = guard(netns, |ns| ns.remove().unwrap());
-
-        // TODO: Use ostree-ext
-        // let img_conf = BACKEND.get().unwrap().get_runtime_config(&metadata.image).unwrap();
-        let mounts = backend().prepare_snapshot(&metadata).await.map_err(|e| {
-            log::error!("Failed to prepare snapshot: {:?}", e);
-            DeployError::InternalError(e.to_string())
-        })?;
-
-        let snapshot_defer = scopeguard::guard((), |()| {
-            log::trace!("Cleaning up snapshot");
-            let endpoint = metadata.endpoint.clone();
-            tokio::spawn(async move { backend().remove_snapshot(&endpoint).await });
-        });
-
-        backend().new_task(mounts, &metadata.endpoint).await?;
-
-        let task_defer = scopeguard::guard((), |()| {
-            let endpoint = metadata.endpoint.clone();
-            tokio::spawn(async move { backend().kill_task_with_timeout(&endpoint).await });
-        });
-
-        use std::net::IpAddr::*;
-
-        match ip.address() {
-            V4(addr) => {
-                if let Err(err) = self
-                    .database
-                    .insert(metadata.endpoint.to_string(), &addr.octets())
-                {
-                    log::error!("Failed to insert into database: {:?}", err);
-                    return Err(DeployError::InternalError(err.to_string()));
-                }
-            }
-            V6(addr) => {
-                if let Err(err) = self
-                    .database
-                    .insert(metadata.endpoint.to_string(), &addr.octets())
-                {
-                    log::error!("Failed to insert into database: {:?}", err);
-                    return Err(DeployError::InternalError(err.to_string()));
-                }
-            }
+        // CAS lock
+        if !self.cache.try_acquire_deploy(&container_name)
+            .map_err(|e| DeployError::Internal(e.to_string()))?
+        {
+            return Err(DeployError::Conflict("deploy or delete in progress".into()));
         }
 
-        log::info!("container was created successfully: {}", metadata.endpoint);
-        ScopeGuard::into_inner(snapshot_defer);
-        ScopeGuard::into_inner(netns_defer);
-        ScopeGuard::into_inner(container_defer);
-        ScopeGuard::into_inner(task_defer);
-        Ok(())
+        let result = self.do_deploy(&container_name, &config).await;
+
+        match &result {
+            Ok(ip) => {
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64;
+                self.cache.commit_deploy(&container_name, &CacheRecord { ip: *ip, created_at: now }).ok();
+            }
+            Err(_) => {
+                self.cache.release_deploy(&container_name).ok();
+                let _ = self.docker.remove_container(&container_name, Some(RemoveContainerOptions { force: true, ..Default::default() })).await;
+            }
+        }
+        result.map(|_| ())
+    }
+
+    async fn do_deploy(&self, name: &str, c: &Deployment) -> Result<std::net::IpAddr, DeployError> {
+        let span = tracing::info_span!("deploy", container = name);
+        let _guard = span.enter();
+
+        // Pull image
+        let mut stream = self.docker.create_image(Some(CreateImageOptions {
+            from_image: c.image.clone(),
+            ..Default::default()
+        }), None, None);
+        while let Some(_) = stream.try_next().await.map_err(|e| DeployError::Internal(e.to_string()))? {}
+        tracing::debug!("image pulled");
+
+        // Create host config with network
+        let host_config = HostConfig {
+            network_mode: Some(self.network.clone()),
+            ..Default::default()
+        };
+        let env_vars: Vec<String> = c.env_vars.iter()
+            .map(|(k, v)| format!("{k}={v}"))
+            .collect();
+
+        let config = bollard::container::Config {
+            image: Some(c.image.clone()),
+            env: Some(env_vars),
+            host_config: Some(host_config),
+            labels: Some(c.labels.clone()),
+            ..Default::default()
+        };
+
+        // Remove existing container if any (idempotent)
+        if self.container_exists(name).await {
+            self.docker.remove_container(name, Some(RemoveContainerOptions { force: true, ..Default::default() }))
+                .await.map_err(|e| DeployError::Internal(e.to_string()))?;
+        }
+
+        self.docker.create_container(Some(CreateContainerOptions { name, ..Default::default() }), config)
+            .await.map_err(|e| DeployError::Internal(e.to_string()))?;
+        tracing::debug!("container created");
+
+        // Start
+        self.docker.start_container(name, None::<StartContainerOptions<String>>)
+            .await.map_err(|e| DeployError::Internal(e.to_string()))?;
+        tracing::debug!("container started");
+
+        // Get IP
+        let info = self.docker.inspect_container(name, None::<InspectContainerOptions>)
+            .await.map_err(|e| DeployError::Internal(e.to_string()))?;
+        let ip = info.network_settings.as_ref()
+            .and_then(|ns| ns.networks.as_ref())
+            .and_then(|nets| nets.get(&self.network))
+            .and_then(|ep| ep.ip_address.as_ref())
+            .and_then(|ip_str| ip_str.parse().ok())
+            .ok_or(DeployError::Internal("no IP assigned".into()))?;
+
+        tracing::info!(ip = %ip, "deployed");
+        Ok(ip)
+    }
+
+    async fn container_exists(&self, name: &str) -> bool {
+        self.docker.inspect_container(name, None::<InspectContainerOptions>).await.is_ok()
     }
 }

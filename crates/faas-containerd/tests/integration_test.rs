@@ -1,158 +1,323 @@
-use actix_web::App;
-use actix_web::http::StatusCode;
-use actix_web::test;
-use faas_containerd::consts::DEFAULT_FAASDRS_DATA_DIR;
-use gateway::bootstrap::config_app;
-use gateway::types::config::FaaSConfig;
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::sync::Mutex;
+
+use axum::body::Body;
+use gateway::provider::Provider;
+use gateway::types::{
+    DeleteError, DeployError, Deployment, ListError, Query, ResolveError, Status, UpdateError,
+};
+use http::{Request, StatusCode};
 use serde_json::json;
+use tower::ServiceExt;
 
-#[actix_web::test]
-#[ignore]
-async fn test_handlers_in_order() {
-    dotenv::dotenv().ok();
-    faas_containerd::init_backend().await;
-    let test_database_url = std::env::var("TEST_DATABASE_URL").unwrap_or_else(|_| {
-        "postgres://dragonos:vitus@localhost/diesel_demo_db_dragonos".to_string()
-    });
-    let db_pool = gateway::models::db::create_pool(&test_database_url)
-        .await
-        .expect("Failed to create database pool");
-    let config = FaaSConfig::new();
-    let provider = faas_containerd::provider::ContainerdProvider::new(DEFAULT_FAASDRS_DATA_DIR);
-    let app = test::init_service(App::new().configure(config_app(provider, db_pool, config))).await;
+/// Mock provider for integration testing the axum router.
+struct MockProvider {
+    functions: Mutex<HashMap<String, Status>>,
+}
 
-    // test proxy no-found-function in namespace 'faasrs-test-namespace'
-    let req: actix_http::Request = test::TestRequest::get()
-        .uri("/function/test-no-found-function")
-        .to_request();
-    let resp = test::call_service(&app, req).await;
-    assert_eq!(resp.status(), StatusCode::METHOD_NOT_ALLOWED);
-    let response_body = test::read_body(resp).await;
-    let response_str = std::str::from_utf8(&response_body).unwrap();
-    assert!(response_str.contains("Invalid function name"));
+impl MockProvider {
+    fn new() -> Self {
+        Self {
+            functions: Mutex::new(HashMap::new()),
+        }
+    }
 
-    // test update no-found-function in namespace 'faasrs-test-namespace'
-    let req = test::TestRequest::put()
-        .uri("/system/functions")
-        .set_json(json!({
-            "service": "test-no-found-function",
-            "image": "hub.scutosc.cn/dolzhuying/echo:latest",
-            "namespace": "faasrs-test-namespace"
-        }))
-        .to_request();
-    let resp = test::call_service(&app, req).await;
-    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
-    let response_body = test::read_body(resp).await;
-    let response_str = std::str::from_utf8(&response_body).unwrap();
-    assert!(response_str.contains("NotFound: container not found"));
+    fn key(function_name: &str, namespace: &str) -> String {
+        format!("{}/{}", namespace, function_name)
+    }
+}
 
-    // test delete no-found-function in namespace 'faasrs-test-namespace'
-    let req = test::TestRequest::delete()
-        .uri("/system/functions")
-        .set_json(json!({
-            "functionName": "test-no-found-function",
-            "namespace": "faasrs-test-namespace"
-        }))
-        .to_request();
-    let resp = test::call_service(&app, req).await;
-    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+#[async_trait::async_trait]
+impl Provider for MockProvider {
+    async fn deploy(&self, deployment: Deployment) -> Result<(), DeployError> {
+        let key = Self::key(&deployment.function_name, &deployment.namespace);
+        let mut funcs = self.functions.lock().unwrap();
+        if funcs.contains_key(&key) {
+            return Err(DeployError::Conflict(format!(
+                "function {} already exists",
+                deployment.function_name
+            )));
+        }
+        funcs.insert(
+            key,
+            Status {
+                name: deployment.function_name.clone(),
+                image: deployment.image.clone(),
+                namespace: deployment.namespace.clone(),
+                labels: deployment.labels.clone(),
+                annotations: deployment.annotations.clone(),
+                env_vars: deployment.env_vars.clone(),
+                created_at: String::new(),
+                available_replicas: 1,
+                invocation_count: 0,
+                status: "Ready".into(),
+            },
+        );
+        Ok(())
+    }
 
-    // test deploy test-function in namespace 'faasrs-test-namespace'
-    let req = test::TestRequest::post()
-        .uri("/system/functions")
-        .set_json(json!({
-            "service": "test-function",
-            "image": "hub.scutosc.cn/dolzhuying/echo:latest",
-            "namespace": "faasrs-test-namespace"
-        }))
-        .to_request();
-    let resp = test::call_service(&app, req).await;
-    assert_eq!(
-        resp.status(),
-        StatusCode::ACCEPTED,
-        "error: {:?}",
-        resp.response()
-    );
+    async fn delete(&self, query: Query) -> Result<(), DeleteError> {
+        let namespace = query.namespace.as_deref().unwrap_or("default");
+        let key = Self::key(&query.function_name, namespace);
+        let mut funcs = self.functions.lock().unwrap();
+        if funcs.remove(&key).is_none() {
+            return Err(DeleteError::NotFound(format!(
+                "function {} not found",
+                query.function_name
+            )));
+        }
+        Ok(())
+    }
 
-    // test update test-function in namespace 'faasrs-test-namespace'
-    let req = test::TestRequest::put()
-        .uri("/system/functions")
-        .set_json(json!({
-            "service": "test-function",
-            "image": "hub.scutosc.cn/dolzhuying/echo:latest",
-            "namespace": "faasrs-test-namespace"
-        }))
-        .to_request();
-    let resp = test::call_service(&app, req).await;
+    async fn resolve(&self, query: Query) -> Result<http::Uri, ResolveError> {
+        let namespace = query.namespace.as_deref().unwrap_or("default");
+        let key = Self::key(&query.function_name, namespace);
+        let funcs = self.functions.lock().unwrap();
+        if funcs.contains_key(&key) {
+            Ok("http://127.0.0.1:8080".parse().unwrap())
+        } else {
+            Err(ResolveError::NotFound(format!(
+                "function {} not found",
+                query.function_name
+            )))
+        }
+    }
+
+    async fn list(&self, namespace: String) -> Result<Vec<Status>, ListError> {
+        let funcs = self.functions.lock().unwrap();
+        let result: Vec<Status> = funcs
+            .values()
+            .filter(|s| s.namespace == namespace)
+            .cloned()
+            .collect();
+        Ok(result)
+    }
+
+    async fn update(&self, deployment: Deployment) -> Result<(), UpdateError> {
+        let key = Self::key(&deployment.function_name, &deployment.namespace);
+        let mut funcs = self.functions.lock().unwrap();
+        if !funcs.contains_key(&key) {
+            return Err(UpdateError::NotFound(format!(
+                "function {} not found",
+                deployment.function_name
+            )));
+        }
+        funcs.insert(
+            key,
+            Status {
+                name: deployment.function_name.clone(),
+                image: deployment.image.clone(),
+                namespace: deployment.namespace.clone(),
+                labels: deployment.labels.clone(),
+                annotations: deployment.annotations.clone(),
+                env_vars: deployment.env_vars.clone(),
+                created_at: String::new(),
+                available_replicas: 1,
+                invocation_count: 0,
+                status: "Ready".into(),
+            },
+        );
+        Ok(())
+    }
+
+    async fn status(&self, query: Query) -> Result<Status, ResolveError> {
+        let namespace = query.namespace.as_deref().unwrap_or("default");
+        let key = Self::key(&query.function_name, namespace);
+        let funcs = self.functions.lock().unwrap();
+        funcs.get(&key).cloned().ok_or_else(|| {
+            ResolveError::NotFound(format!("function {} not found", query.function_name))
+        })
+    }
+}
+
+fn make_app() -> (axum::Router, Arc<MockProvider>) {
+    let provider = Arc::new(MockProvider::new());
+    let app = gateway::app(provider.clone());
+    (app, provider)
+}
+
+#[tokio::test]
+async fn deploy_and_status() {
+    let (app, _provider) = make_app();
+
+    // Deploy a function
+    let req = Request::post("/deploy")
+        .header("content-type", "application/json")
+        .body(Body::from(
+            json!({
+                "function_name": "test-fn",
+                "image": "test/image:latest",
+                "namespace": "test-ns"
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    let resp = app.clone().oneshot(req).await.unwrap();
     assert_eq!(resp.status(), StatusCode::ACCEPTED);
-    let response_body = test::read_body(resp).await;
-    let response_str = std::str::from_utf8(&response_body).unwrap();
-    assert!(response_str.contains("function test-function was updated successfully"));
 
-    // test list
-    let req = test::TestRequest::get()
-        .uri("/system/functions?namespace=faasrs-test-namespace")
-        .to_request();
-    let resp = test::call_service(&app, req).await;
+    // Check status
+    let req = Request::get("/status/test-fn?namespace=test-ns")
+        .body(Body::empty())
+        .unwrap();
+    let resp = app.clone().oneshot(req).await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
-    let response_body = test::read_body(resp).await;
-    let response_str = std::str::from_utf8(&response_body).unwrap();
-    let response_json: serde_json::Value = serde_json::from_str(response_str).unwrap();
-    if let Some(arr) = response_json.as_array() {
-        for item in arr {
-            assert_eq!(
-                item["name"],
-                serde_json::Value::String("test-function".to_string())
-            );
-            assert_eq!(
-                item["image"],
-                serde_json::Value::String("hub.scutosc.cn/dolzhuying/echo:latest".to_string())
-            );
-            assert_eq!(
-                item["namespace"],
-                serde_json::Value::String("faasrs-test-namespace".to_string())
-            );
-        }
-    }
+}
 
-    // test status test-function in namespace 'faasrs-test-namespace'
-    let req = test::TestRequest::get()
-        .uri("/system/function/test-function?namespace=faasrs-test-namespace")
-        .to_request();
-    let resp = test::call_service(&app, req).await;
-    assert_eq!(resp.status(), StatusCode::OK);
-    let response_body = test::read_body(resp).await;
-    let response_str = std::str::from_utf8(&response_body).unwrap();
-    let response_json: serde_json::Value = serde_json::from_str(response_str).unwrap();
-    if let Some(arr) = response_json.as_array() {
-        for item in arr {
-            assert_eq!(item["name"], "test-function");
-            assert_eq!(item["image"], "hub.scutosc.cn/dolzhuying/echo:latest");
-            assert_eq!(item["namespace"], "faasrs-test-namespace");
-        }
-    }
+#[tokio::test]
+async fn deploy_conflict() {
+    let (app, _provider) = make_app();
 
-    // test proxy test-function in namespace 'faasrs-test-namespace'
-    let req = test::TestRequest::get()
-        .uri("/function/test-function.faasrs-test-namespace")
-        .to_request();
-    let resp = test::call_service(&app, req).await;
-    assert_eq!(resp.status(), StatusCode::OK);
-    let response_body = test::read_body(resp).await;
-    let response_str = std::str::from_utf8(&response_body).unwrap();
-    assert!(response_str.contains("Hello world!"));
+    let body = json!({
+        "function_name": "dup-fn",
+        "image": "test/image:latest",
+        "namespace": "test-ns"
+    })
+    .to_string();
 
-    // test delete test-function in namespace 'faasrs-test-namespace'
-    let req = test::TestRequest::delete()
-        .uri("/system/functions")
-        .set_json(json!({
-            "functionName": "test-function",
-            "namespace": "faasrs-test-namespace"
-        }))
-        .to_request();
-    let resp = test::call_service(&app, req).await;
+    // First deploy
+    let req = Request::post("/deploy")
+        .header("content-type", "application/json")
+        .body(Body::from(body.clone()))
+        .unwrap();
+    let resp = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::ACCEPTED);
+
+    // Second deploy (conflict)
+    let req = Request::post("/deploy")
+        .header("content-type", "application/json")
+        .body(Body::from(body))
+        .unwrap();
+    let resp = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::CONFLICT);
+}
+
+#[tokio::test]
+async fn delete_not_found() {
+    let (app, _provider) = make_app();
+
+    let req = Request::post("/delete")
+        .header("content-type", "application/json")
+        .body(Body::from(
+            json!({
+                "function_name": "nonexistent",
+                "namespace": "test-ns"
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    let resp = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn delete_success() {
+    let (app, _provider) = make_app();
+
+    // Deploy first
+    let body = json!({
+        "function_name": "del-fn",
+        "image": "test/image:latest",
+        "namespace": "test-ns"
+    })
+    .to_string();
+    let req = Request::post("/deploy")
+        .header("content-type", "application/json")
+        .body(Body::from(body))
+        .unwrap();
+    let resp = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::ACCEPTED);
+
+    // Delete
+    let req = Request::post("/delete")
+        .header("content-type", "application/json")
+        .body(Body::from(
+            json!({
+                "function_name": "del-fn",
+                "namespace": "test-ns"
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    let resp = app.clone().oneshot(req).await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
-    let response_body = test::read_body(resp).await;
-    let response_str = std::str::from_utf8(&response_body).unwrap();
-    assert!(response_str.contains("function test-function was deleted successfully"));
+}
+
+#[tokio::test]
+async fn list_empty_namespace() {
+    let (app, _provider) = make_app();
+
+    let req = Request::get("/list?namespace=empty-ns")
+        .body(Body::empty())
+        .unwrap();
+    let resp = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn update_not_found() {
+    let (app, _provider) = make_app();
+
+    let req = Request::post("/update")
+        .header("content-type", "application/json")
+        .body(Body::from(
+            json!({
+                "function_name": "nonexistent",
+                "image": "test/image:v2",
+                "namespace": "test-ns"
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    let resp = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn status_not_found() {
+    let (app, _provider) = make_app();
+
+    let req = Request::get("/status/nonexistent?namespace=test-ns")
+        .body(Body::empty())
+        .unwrap();
+    let resp = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn resolve_not_found() {
+    let (app, _provider) = make_app();
+
+    let req = Request::get("/resolve/nonexistent?namespace=test-ns")
+        .body(Body::empty())
+        .unwrap();
+    let resp = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn resolve_success() {
+    let (app, _provider) = make_app();
+
+    // Deploy first
+    let req = Request::post("/deploy")
+        .header("content-type", "application/json")
+        .body(Body::from(
+            json!({
+                "function_name": "resolve-fn",
+                "image": "test/image:latest",
+                "namespace": "test-ns"
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    let resp = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::ACCEPTED);
+
+    // Resolve
+    let req = Request::get("/resolve/resolve-fn?namespace=test-ns")
+        .body(Body::empty())
+        .unwrap();
+    let resp = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
 }

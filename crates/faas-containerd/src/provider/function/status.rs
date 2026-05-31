@@ -1,69 +1,32 @@
-use gateway::{
-    handlers::function::ResolveError,
-    types::function::{Query, Status},
-};
-
-use crate::{
-    impls::{backend, cni::Endpoint, container::ContainerError},
-    provider::ContainerdProvider,
-};
+use gateway::types::{Query, ResolveError, Status};
+use bollard::container::InspectContainerOptions;
+use crate::provider::ContainerdProvider;
 
 impl ContainerdProvider {
-    pub(crate) async fn _status(&self, function: Query) -> Result<Status, ResolveError> {
-        let endpoint: Endpoint = function.into();
-        let container = backend().load_container(&endpoint).await.map_err(|e| {
-            log::error!(
-                "failed to load container for function {:?} because {:?}",
-                endpoint,
-                e
-            );
-            match e {
-                ContainerError::NotFound => ResolveError::NotFound(e.to_string()),
-                ContainerError::Internal => ResolveError::Internal(e.to_string()),
-                _ => ResolveError::Invalid(e.to_string()),
+    pub async fn function_status(&self, q: Query) -> Result<Status, ResolveError> {
+        let ns = q.namespace.as_deref().unwrap_or("openfaas-fn");
+        let name = format!("faasdrs-{}-{}", ns, q.function_name);
+
+        let info = self.docker.inspect_container(&name, None::<InspectContainerOptions>).await.map_err(|e| {
+            let msg = e.to_string();
+            if msg.contains("No such container") || msg.contains("not found") {
+                ResolveError::NotFound(msg)
+            } else {
+                ResolveError::Internal(msg)
             }
         })?;
 
-        let created_at = container.created_at.unwrap().to_string();
-        let mut replicas = 0;
+        let state = info.state.as_ref();
+        let running = state.and_then(|s| s.running).unwrap_or(false);
 
-        match backend().get_task(&endpoint).await {
-            Ok(task) => {
-                let status = task.status;
-                if status == 2 || status == 3 {
-                    replicas = 1;
-                }
-            }
-            Err(e) => {
-                log::warn!(
-                    "failed to get task for function {:?} because {:?}",
-                    &endpoint,
-                    e
-                );
-            }
-        }
-
-        // 大部分字段并未实现，使用None填充
-        let status = Status {
-            function_name: container.id,
-            namespace: Some(endpoint.namespace),
-            image: container.image,
-            env_process: None,
-            env_vars: None,
-            constraints: None,
-            secrets: None,
-            labels: None,
-            annotations: None,
-            limits: None,
-            requests: None,
-            read_only_root_filesystem: false,
-            invocation_count: None,
-            replicas: Some(replicas),
-            available_replicas: Some(replicas),
-            created_at: Some(created_at),
-            usage: None,
-        };
-
-        Ok(status)
+        Ok(Status {
+            name: q.function_name,
+            namespace: ns.to_string(),
+            image: info.config.as_ref().and_then(|c| c.image.clone()).unwrap_or_default(),
+            available_replicas: if running { 1 } else { 0 },
+            created_at: info.created.map(|t| t.to_string()).unwrap_or_default(),
+            status: format!("{:?}", state.and_then(|s| s.status.as_ref()).unwrap_or(&bollard::models::ContainerStateStatusEnum::EMPTY)),
+            ..Default::default()
+        })
     }
 }

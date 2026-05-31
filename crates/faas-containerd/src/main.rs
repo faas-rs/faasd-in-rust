@@ -1,37 +1,34 @@
-use faas_containerd::consts::DEFAULT_FAASDRS_DATA_DIR;
-use tokio::signal::unix::{SignalKind, signal};
+use faas_containerd::provider::ContainerdProvider;
 
 #[tokio::main]
-async fn main() -> std::io::Result<()> {
-    dotenv::dotenv().ok();
-    env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
-    faas_containerd::init_backend().await;
-    let provider = faas_containerd::provider::ContainerdProvider::new(DEFAULT_FAASDRS_DATA_DIR);
+async fn main() {
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
 
-    // leave for shutdown containers (stop tasks)
-    let _handle = provider.clone();
+    let provider = ContainerdProvider::new("/var/lib/faasdrs/data");
 
-    tokio::spawn(async move {
-        log::info!("Setting up signal handlers for graceful shutdown");
-        let mut sigint = signal(SignalKind::interrupt()).unwrap();
-        let mut sigterm = signal(SignalKind::terminate()).unwrap();
-        let mut sigquit = signal(SignalKind::quit()).unwrap();
-        tokio::select! {
-            _ = sigint.recv() => log::info!("SIGINT received, starting graceful shutdown..."),
-            _ = sigterm.recv() => log::info!("SIGTERM received, starting graceful shutdown..."),
-            _ = sigquit.recv() => log::info!("SIGQUIT received, starting graceful shutdown..."),
-        }
-        // for (_q, ctr) in handle.ctr_instance_map.lock().await.drain() {
-        //     let _ = ctr.delete().await;
-        // }
-        log::info!("Successfully shutdown all containers");
-    });
-
-    gateway::bootstrap::serve(provider)
-        .await
-        .unwrap_or_else(|e| {
-            log::error!("Failed to start server: {}", e);
-            std::process::exit(1);
+    // Ensure Docker network exists
+    if let Err(e) = provider
+        .docker
+        .create_network(bollard::network::CreateNetworkOptions {
+            name: "faasrs0",
+            driver: "bridge",
+            ..Default::default()
         })
         .await
+    {
+        // Network likely exists — ignore
+        tracing::warn!("Network creation: {:?}", e);
+    }
+
+    let app = gateway::app(provider);
+    let port: u16 = std::env::var("PORT")
+        .ok()
+        .and_then(|p| p.parse().ok())
+        .unwrap_or(8080);
+    let addr = format!("0.0.0.0:{port}");
+    tracing::info!("Starting gateway on {addr}");
+    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
+    axum::serve(listener, app).await.unwrap();
 }
