@@ -82,7 +82,7 @@ impl ContainerdService {
         let mut sc = self.client.snapshots();
         let ls_req = ListSnapshotsRequest {
             snapshotter: crate::consts::DEFAULT_SNAPSHOTTER.to_string(),
-            filters: vec![format!("parent==")],
+            filters: vec!["parent==".to_string()],
         };
 
         let mut stream = sc

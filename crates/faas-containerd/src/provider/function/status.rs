@@ -34,7 +34,7 @@ impl ContainerdProvider {
             Err(e) => {
                 log::warn!(
                     "failed to get task for function {:?} because {:?}",
-                    &endpoint,
+                    endpoint,
                     e
                 );
             }

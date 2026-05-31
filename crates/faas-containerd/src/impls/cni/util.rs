@@ -57,6 +57,7 @@ fn cni_conf(name: &str, bridge: &str, subnet: &str, data_dir: &str) -> String {
     )
 }
 
+#[allow(dead_code)]
 pub(super) struct CniConfFile {
     pub conf_dir: PathBuf,
     pub conf_filename: String,

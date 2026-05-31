@@ -21,13 +21,13 @@ pub async fn serve<P: Provider>(provider: Arc<P>, port: u16, handle: &RuntimeHan
         async move { dispatch(p, req).await }
     })
     .await
-    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+    .map_err(|e| std::io::Error::other(e.to_string()))?;
 
     listener
         .run(handle)
         .await
         .map(|_| ())
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
+        .map_err(|e| std::io::Error::other(e.to_string()))
 }
 
 // ── Route dispatch ──────────────────────────────────────────────────────
@@ -216,15 +216,16 @@ fn url_decode(s: &str) -> String {
     let bytes = s.as_bytes();
     let mut i = 0;
     while i < bytes.len() {
-        if bytes[i] == b'%' && i + 2 < bytes.len() {
-            if let Ok(hex) = u8::from_str_radix(
+        if bytes[i] == b'%'
+            && i + 2 < bytes.len()
+            && let Ok(hex) = u8::from_str_radix(
                 std::str::from_utf8(&bytes[i + 1..i + 3]).unwrap_or("00"),
                 16,
-            ) {
-                out.push(hex as char);
-                i += 3;
-                continue;
-            }
+            )
+        {
+            out.push(hex as char);
+            i += 3;
+            continue;
         }
         out.push(if bytes[i] == b'+' { ' ' } else { bytes[i] as char });
         i += 1;

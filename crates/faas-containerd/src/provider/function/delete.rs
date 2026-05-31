@@ -15,24 +15,24 @@ pub async fn delete_containerd_resources(endpoint: &Endpoint) {
     }
 
     // Snapshot
-    if backend().snapshot_exists(endpoint).await {
-        if let Err(e) = backend().remove_snapshot(endpoint).await {
-            log::error!("remove snapshot {}: {:?}", endpoint, e);
-        }
+    if backend().snapshot_exists(endpoint).await
+        && let Err(e) = backend().remove_snapshot(endpoint).await
+    {
+        log::error!("remove snapshot {}: {:?}", endpoint, e);
     }
 
     // Container
-    if backend().container_exists(endpoint).await {
-        if let Err(e) = backend().delete_container(endpoint).await {
-            log::error!("delete container {}: {:?}", endpoint, e);
-        }
+    if backend().container_exists(endpoint).await
+        && let Err(e) = backend().delete_container(endpoint).await
+    {
+        log::error!("delete container {}: {:?}", endpoint, e);
     }
 
     // CNI
-    if let Some(cx) = asupersync::Cx::current() {
-        if let Err(e) = cni::cni_impl::delete_cni_network(&cx, endpoint) {
-            log::error!("delete cni {}: {:?}", endpoint, e);
-        }
+    if let Some(cx) = asupersync::Cx::current()
+        && let Err(e) = cni::cni_impl::delete_cni_network(&cx, endpoint)
+    {
+        log::error!("delete cni {}: {:?}", endpoint, e);
     }
 }
 

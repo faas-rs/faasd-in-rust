@@ -72,7 +72,7 @@ impl ContainerdProvider {
                 ImageError::ImageNotFound(msg) => DeployError::Invalid(msg.clone()),
                 _ => DeployError::Internal(e.to_string()),
             })?;
-        log::trace!("Image '{}' ready", &metadata.image);
+        log::trace!("Image '{}' ready", metadata.image);
 
         // ── Step 2: Create container ────────────────────────────────
         cx.checkpoint().map_err(|_| DeployError::Cancelled)?;
