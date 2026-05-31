@@ -11,6 +11,8 @@ pub enum DeployError {
     Invalid(String),
     #[display("Internal: {}", _0)]
     Internal(String),
+    #[display("Conflict: {}", _0)]
+    Conflict(String),
     #[display("Cancelled")]
     Cancelled,
 }

@@ -4,28 +4,69 @@ use crate::provider::ContainerdProvider;
 use crate::state::CacheRecord;
 use gateway::types::{DeployError, Deployment};
 
+use super::delete;
+
 impl ContainerdProvider {
-    /// Idempotent deploy: each step queries containerd first, creates only
-    /// if the resource does not already exist.  `cx.checkpoint()` between
-    /// steps enables cancellation at any point without resource leaks.
+    /// Idempotent deploy with CAS serialization.
     ///
-    /// Naming convention `faasdrs-{namespace}-{function_name}` isolates
-    /// faasd resources from other containerd workloads.
+    /// `try_acquire_deploy` → CAS None→InFlight, serialising against
+    /// concurrent deploys and deletes.  On any error (including cancellation),
+    /// the deploy lock is released and containerd resources are cleaned up
+    /// before returning.
     pub async fn deploy(&self, config: Deployment) -> Result<(), DeployError> {
         let cx = asupersync::Cx::current();
         let cx = cx.as_ref().ok_or(DeployError::Internal("no Cx".into()))?;
 
         let metadata = ContainerStaticMetadata::from(config);
         let endpoint = &metadata.endpoint;
+
+        // ── Acquire deploy lock ────────────────────────────────────
+        if !self.cache.try_acquire_deploy(endpoint).map_err(|e| {
+            DeployError::Internal(e.to_string())
+        })? {
+            return Err(DeployError::Conflict(
+                "function is being deployed or deleted".into(),
+            ));
+        }
         log::info!("Deploying function: {:?}", endpoint);
 
-        // ── Step 1: Pull image ──────────────────────────────────────
-        cx.checkpoint()
-            .map_err(|_| DeployError::Cancelled)?;
-        cx.trace("deploy:pulling");
+        // Run deploy with auto-cleanup on any failure or cancel.
+        let result = self.do_deploy_impl(cx, &metadata).await;
 
+        match &result {
+            Ok(ip_addr) => {
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_millis() as u64;
+                let _ = self.cache.commit_deploy(endpoint, &CacheRecord {
+                    ip: *ip_addr,
+                    created_at: now,
+                });
+                log::info!("Function {} deployed at {}", endpoint, ip_addr);
+            }
+            Err(_) => {
+                log::warn!("Deploy failed for {}, cleaning up", endpoint);
+                self.cache.release_deploy(endpoint).ok();
+                delete::delete_containerd_resources(endpoint).await;
+            }
+        }
+
+        result.map(|_| ())
+    }
+
+    async fn do_deploy_impl(
+        &self,
+        cx: &asupersync::Cx,
+        metadata: &ContainerStaticMetadata,
+    ) -> Result<std::net::IpAddr, DeployError> {
+        let endpoint = &metadata.endpoint;
+
+        // ── Step 1: Pull image ────────────────────────────────────
+        cx.checkpoint().map_err(|_| DeployError::Cancelled)?;
+        cx.trace("deploy:pulling");
         backend()
-            .prepare_image(&metadata.image, &endpoint.namespace, false /* idempotent */)
+            .prepare_image(&metadata.image, &endpoint.namespace, false)
             .await
             .map_err(|e| match &e {
                 ImageError::ImageNotFound(msg) => DeployError::Invalid(msg.clone()),
@@ -33,90 +74,53 @@ impl ContainerdProvider {
             })?;
         log::trace!("Image '{}' ready", &metadata.image);
 
-        // ── Step 2: Create container ─────────────────────────────────
-        cx.checkpoint()
-            .map_err(|_| DeployError::Cancelled)?;
+        // ── Step 2: Create container ────────────────────────────────
+        cx.checkpoint().map_err(|_| DeployError::Cancelled)?;
         cx.trace("deploy:creating");
-
         if !backend().container_exists(endpoint).await {
-            backend().create_container(&metadata).await.map_err(|e| {
+            backend().create_container(metadata).await.map_err(|e| {
                 log::error!("Failed to create container: {:?}", e);
                 DeployError::Internal(e.to_string())
             })?;
             log::trace!("Container created");
         } else {
-            log::trace!("Container already exists, skipping create");
+            log::trace!("Container already exists");
         }
 
-        // ── Step 3: Create CNI network ───────────────────────────────
-        cx.checkpoint()
-            .map_err(|_| DeployError::Cancelled)?;
+        // ── Step 3: CNI network ─────────────────────────────────────
+        cx.checkpoint().map_err(|_| DeployError::Cancelled)?;
         cx.trace("deploy:networking");
-
         let (ip, _netns) = cni::cni_impl::create_cni_network(cx, endpoint).map_err(|e| {
-            log::error!("Failed to create CNI network: {}", e);
+            log::error!("CNI failed: {}", e);
             DeployError::Internal(e.msg)
         })?;
         let ip_addr = ip.address();
-        log::trace!("CNI network created with IP: {:?}", ip_addr);
 
-        // ── Step 4: Prepare snapshot ──────────────────────────────────
-        cx.checkpoint()
-            .map_err(|_| DeployError::Cancelled)?;
+        // ── Step 4: Snapshot ─────────────────────────────────────────
+        cx.checkpoint().map_err(|_| DeployError::Cancelled)?;
         cx.trace("deploy:snapshoting");
-
         if !backend().snapshot_exists(endpoint).await {
-            backend().prepare_snapshot(&metadata).await.map_err(|e| {
-                log::error!("Failed to prepare snapshot: {:?}", e);
+            backend().prepare_snapshot(metadata).await.map_err(|e| {
+                log::error!("Snapshot failed: {:?}", e);
                 DeployError::Internal(e.to_string())
             })?;
-            log::trace!("Snapshot prepared");
-        } else {
-            log::trace!("Snapshot already exists, skipping prepare");
         }
 
-        // ── Step 5: Create and start task ─────────────────────────────
-        cx.checkpoint()
-            .map_err(|_| DeployError::Cancelled)?;
+        // ── Step 5: Task ─────────────────────────────────────────────
+        cx.checkpoint().map_err(|_| DeployError::Cancelled)?;
         cx.trace("deploy:starting");
-
         if !backend().task_exists(endpoint).await {
-            // Need mounts from snapshot for task creation
-            let mounts = backend().prepare_snapshot(&metadata).await.map_err(|e| {
-                log::error!("Failed to get mounts: {:?}", e);
+            let mounts = backend().prepare_snapshot(metadata).await.map_err(|e| {
+                log::error!("Mounts failed: {:?}", e);
                 DeployError::Internal(e.to_string())
             })?;
             backend().new_task(mounts, endpoint).await.map_err(|e| {
-                log::error!("Failed to create task: {:?}", e);
+                log::error!("Task failed: {:?}", e);
                 DeployError::Internal(e.to_string())
             })?;
-            log::trace!("Task created and started");
-        } else {
-            log::trace!("Task already exists, skipping create");
         }
 
-        // ── Step 6: Cache IP ──────────────────────────────────────────
-        cx.checkpoint()
-            .map_err(|_| DeployError::Cancelled)?;
-        cx.trace("deploy:caching");
-
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_millis() as u64;
-        self.cache
-            .put(endpoint, &CacheRecord {
-                ip: ip_addr,
-                created_at: now,
-            })
-            .map_err(|e| DeployError::Internal(e.to_string()))?;
-
-        log::info!(
-            "Function {} deployed successfully at {}",
-            endpoint,
-            ip_addr
-        );
-        Ok(())
+        Ok(ip_addr)
     }
 }
 

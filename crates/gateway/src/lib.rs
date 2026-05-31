@@ -103,19 +103,10 @@ async fn handle_deploy<P: Provider>(p: Arc<P>, body: &[u8]) -> Response {
         Err(e) => return e,
     };
 
-    let query = Query {
-        function_name: d.function_name.clone(),
-        namespace: d.namespace.clone(),
-    };
-
     match p.deploy(d).await {
         Ok(()) => json_response(StatusCode(202), &serde_json::json!({"status": "accepted"})),
-        Err(DeployError::Cancelled) => {
-            log::warn!("Deploy cancelled for {:?}, rolling back", query.function_name);
-            // Trigger containerd-driven cleanup — idempotent, safe on partial state
-            let _ = p.delete(query).await;
-            error_response(StatusCode(500), "deploy cancelled")
-        }
+        Err(DeployError::Conflict(msg)) => error_response(StatusCode(409), &msg),
+        Err(DeployError::Cancelled) => error_response(StatusCode(500), "deploy cancelled"),
         Err(e) => error_response(StatusCode(500), &e.to_string()),
     }
 }

@@ -10,36 +10,25 @@ fn upstream(addr: IpAddr) -> http::Uri {
 }
 
 impl ContainerdProvider {
-    pub async fn resolve(
-        &self,
-        query: Query,
-    ) -> Result<http::Uri, ResolveError> {
+    pub async fn resolve(&self, query: Query) -> Result<http::Uri, ResolveError> {
         let endpoint = Endpoint::from(query);
         log::trace!("Resolving function: {:?}", endpoint);
 
-        let record = match self.cache.get(&endpoint) {
+        let record = match self.cache.get_ip(&endpoint) {
             Ok(Some(r)) => r,
             Ok(None) => {
-                log::trace!("No cache entry for {}", endpoint);
                 return Err(ResolveError::NotFound("container not found".to_string()));
             }
             Err(e) => {
-                log::error!("Failed to read cache for {}: {:?}", endpoint, e);
+                log::error!("Cache read failed for {}: {:?}", endpoint, e);
                 return Err(ResolveError::Internal(e.to_string()));
             }
         };
 
-        // Verify the underlying CNI network still exists
         if cni::cni_impl::check_network_exists(record.ip) {
-            log::trace!("CNI network confirmed for {} = {}", endpoint, record.ip);
             Ok(upstream(record.ip))
         } else {
-            // Network gone — stale cache.  Clean up and return 503.
-            log::error!(
-                "CNI network missing for {} = {} (drift detected, clearing cache)",
-                endpoint,
-                record.ip,
-            );
+            log::error!("CNI network missing for {} = {}", endpoint, record.ip);
             self.cache.remove(&endpoint).ok();
             Err(ResolveError::Internal("CNI network not exists".to_string()))
         }

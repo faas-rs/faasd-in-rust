@@ -21,6 +21,7 @@ impl ContainerdProvider {
             match e {
                 DeployError::Invalid(e) => UpdateError::Invalid(e.to_string()),
                 DeployError::Internal(e) => UpdateError::Internal(e.to_string()),
+                DeployError::Conflict(e) => UpdateError::Internal(e.to_string()),
                 DeployError::Cancelled => UpdateError::Internal("cancelled".to_string()),
             }
         })?;

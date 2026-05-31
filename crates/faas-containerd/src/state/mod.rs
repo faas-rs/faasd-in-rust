@@ -1,3 +1,3 @@
 pub mod record;
 
-pub use record::{CacheRecord, CacheStore, CacheStoreError};
+pub use record::{CacheRecord, CacheStore, CacheStoreError, CacheTag};
