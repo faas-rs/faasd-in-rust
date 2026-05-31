@@ -4,8 +4,13 @@ pub mod types;
 pub use provider::Provider;
 pub use types::*;
 
-use axum::{extract::{Path, State}, http::StatusCode, routing::{get, post}, Json, Router};
 use axum::extract::Query as AxumQuery;
+use axum::{
+    Json, Router,
+    extract::{Path, State},
+    http::StatusCode,
+    routing::{get, post},
+};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -125,20 +130,13 @@ async fn handle_list<P: Provider>(
     State(provider): State<Arc<P>>,
 ) -> Result<Json<Vec<Status>>, (StatusCode, Json<serde_json::Value>)> {
     let namespace = namespace_from_query(&params);
-    provider
-        .list(namespace)
-        .await
-        .map(Json)
-        .map_err(|e| {
-            let msg = match &e {
-                ListError::Internal(msg) => msg.clone(),
-            };
-            tracing::warn!(error = %e, "list failed");
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                error_json(&msg),
-            )
-        })
+    provider.list(namespace).await.map(Json).map_err(|e| {
+        let msg = match &e {
+            ListError::Internal(msg) => msg.clone(),
+        };
+        tracing::warn!(error = %e, "list failed");
+        (StatusCode::INTERNAL_SERVER_ERROR, error_json(&msg))
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -178,17 +176,13 @@ async fn handle_status<P: Provider>(
         function_name: name,
         namespace: Some(namespace),
     };
-    provider
-        .status(query)
-        .await
-        .map(Json)
-        .map_err(|e| {
-            let (code, msg) = match &e {
-                ResolveError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.clone()),
-                ResolveError::Invalid(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
-                ResolveError::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.clone()),
-            };
-            tracing::warn!(error = %e, "status failed");
-            (code, error_json(&msg))
-        })
+    provider.status(query).await.map(Json).map_err(|e| {
+        let (code, msg) = match &e {
+            ResolveError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.clone()),
+            ResolveError::Invalid(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
+            ResolveError::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.clone()),
+        };
+        tracing::warn!(error = %e, "status failed");
+        (code, error_json(&msg))
+    })
 }

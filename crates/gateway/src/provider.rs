@@ -1,5 +1,5 @@
-use async_trait::async_trait;
 use crate::types::*;
+use async_trait::async_trait;
 
 #[async_trait]
 pub trait Provider: Send + Sync + 'static {

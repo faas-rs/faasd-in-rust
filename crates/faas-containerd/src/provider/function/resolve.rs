@@ -1,5 +1,5 @@
-use gateway::types::{Query, ResolveError};
 use crate::provider::ContainerdProvider;
+use gateway::types::{Query, ResolveError};
 
 fn upstream(ip: std::net::IpAddr) -> http::Uri {
     format!("http://{ip}:8080").parse().unwrap()
