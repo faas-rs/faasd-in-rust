@@ -6,9 +6,9 @@ use containerd_client::{
 use derive_more::Display;
 
 use containerd_client::services::v1::container::Runtime;
+use tonic::Request;
 
 use super::{ContainerdService, backend, cni::Endpoint, function::ContainerStaticMetadata};
-use tonic::Request;
 
 #[derive(Debug, Display)]
 pub enum ContainerError {
@@ -23,8 +23,9 @@ impl ContainerdService {
         &self,
         metadata: &ContainerStaticMetadata,
     ) -> Result<Container, ContainerError> {
+        let cid = metadata.endpoint.to_string();
         let container = Container {
-            id: metadata.endpoint.function_name.clone(),
+            id: cid.clone(),
             image: metadata.image.clone(),
             runtime: Some(Runtime {
                 name: "io.containerd.runc.v2".to_string(),
@@ -35,7 +36,7 @@ impl ContainerdService {
                 ContainerError::Internal
             })?),
             snapshotter: crate::consts::DEFAULT_SNAPSHOTTER.to_string(),
-            snapshot_key: metadata.endpoint.function_name.clone(),
+            snapshot_key: cid,
             ..Default::default()
         };
 
@@ -57,15 +58,11 @@ impl ContainerdService {
 
     /// 删除容器
     pub async fn delete_container(&self, endpoint: &Endpoint) -> Result<(), ContainerError> {
-        let Endpoint {
-            function_name: cid,
-            namespace: ns,
-        } = endpoint;
         let mut cc = self.client.containers();
-
-        let delete_request = DeleteContainerRequest { id: cid.clone() };
-
-        cc.delete(with_namespace!(delete_request, ns))
+        let delete_request = DeleteContainerRequest {
+            id: endpoint.to_string(),
+        };
+        cc.delete(with_namespace!(delete_request, endpoint.namespace))
             .await
             .map_err(|e| {
                 log::error!("Failed to delete container: {}", e);
@@ -77,39 +74,45 @@ impl ContainerdService {
     /// 根据查询条件加载容器参数
     pub async fn load_container(&self, endpoint: &Endpoint) -> Result<Container, ContainerError> {
         let mut cc = self.client.containers();
-
         let request = GetContainerRequest {
-            id: endpoint.function_name.clone(),
+            id: endpoint.to_string(),
         };
-
         let resp = cc
             .get(with_namespace!(request, endpoint.namespace))
             .await
             .map_err(|e| {
-                log::error!("Failed to list containers: {}", e);
+                log::error!("Failed to load container: {}", e);
                 ContainerError::Internal
             })?;
-
         resp.into_inner().container.ok_or(ContainerError::NotFound)
+    }
+
+    /// Check whether a container exists in containerd.
+    pub async fn container_exists(&self, endpoint: &Endpoint) -> bool {
+        let mut cc = self.client.containers();
+        let request = GetContainerRequest {
+            id: endpoint.to_string(),
+        };
+        cc.get(with_namespace!(request, endpoint.namespace))
+            .await
+            .is_ok()
     }
 
     /// 获取容器列表
     pub async fn list_container(&self, namespace: &str) -> Result<Vec<Container>, ContainerError> {
         let mut cc = self.client.containers();
-
         let request = ListContainersRequest {
-            ..Default::default()
+            filters: vec![],
         };
-
         let resp = cc
             .list(with_namespace!(request, namespace))
             .await
             .map_err(|e| {
                 log::error!("Failed to list containers: {}", e);
                 ContainerError::Internal
-            })?;
-
-        Ok(resp.into_inner().containers)
+            })?
+            .into_inner();
+        Ok(resp.containers)
     }
 
     /// 不儿，这也要单独一个函数？
@@ -120,6 +123,6 @@ impl ContainerdService {
     ) -> Result<Vec<String>, ContainerError> {
         self.list_container(ns)
             .await
-            .map(|ctrs| ctrs.into_iter().map(|ctr| ctr.id).collect())
+            .map(|cs| cs.into_iter().map(|c| c.id).collect())
     }
 }

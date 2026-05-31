@@ -4,16 +4,16 @@ use std::{collections::HashMap, path::Path, sync::Arc};
 use gateway::provider::Provider;
 use gateway::types::*;
 
-use crate::state::StateStore;
+use crate::state::CacheStore;
 
 pub struct ContainerdProvider {
-    pub state_store: StateStore,
+    pub cache: CacheStore,
 }
 
 impl ContainerdProvider {
     pub fn new<P: AsRef<Path>>(path: P) -> Arc<Self> {
         Arc::new(ContainerdProvider {
-            state_store: StateStore::new(sled::open(path).unwrap()),
+            cache: CacheStore::new(sled::open(path).unwrap()),
         })
     }
 }

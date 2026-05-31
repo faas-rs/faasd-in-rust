@@ -5,7 +5,7 @@ version.workspace = true
 authors.workspace = true
 
 [dependencies]
-asupersync = "0.2.5"
+asupersync = "0.3.2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 log = "0.4.27"

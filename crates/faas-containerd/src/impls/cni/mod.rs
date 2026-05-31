@@ -23,10 +23,10 @@ impl Endpoint {
     }
 }
 
-/// format `<namespace>-<function_name>` as netns name, also the identifier of each function
+/// format `faasdrs-<namespace>-<function_name>` — used as resource ID and sled key
 impl std::fmt::Display for Endpoint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}-{}", self.namespace, self.function_name)
+        write!(f, "faasdrs-{}-{}", self.namespace, self.function_name)
     }
 }
 

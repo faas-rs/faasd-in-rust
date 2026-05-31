@@ -6,7 +6,7 @@ edition = "2024"
 [dependencies]
 containerd-client = "0.8"
 tonic = { version = "0.12", default-features = false, features = ["channel", "codegen", "prost"] }
-asupersync = "0.2.5"
+asupersync = "0.3.2"
 hyper = "1"
 gateway = { path = "../gateway" }
 http = "1"

@@ -5,6 +5,22 @@ use crate::{
     provider::ContainerdProvider,
 };
 
+/// Parse a containerd container ID like "faasdrs-default-hello" back into
+/// an Endpoint. Returns None if the ID doesn't have the faasdrs- prefix.
+fn parse_faasd_id(id: &str, namespace: &str) -> Option<Endpoint> {
+    let remainder = id.strip_prefix("faasdrs-")?;
+    // remainder is "{namespace}-{function_name}"
+    // Split at first '-' to get namespace prefix, rest is function_name
+    let dash_pos = remainder.find('-')?;
+    let ns = &remainder[..dash_pos];
+    let fn_name = &remainder[dash_pos + 1..];
+    if ns == namespace {
+        Some(Endpoint::new(fn_name, namespace))
+    } else {
+        None
+    }
+}
+
 impl ContainerdProvider {
     pub async fn list(&self, namespace: String) -> Result<Vec<Status>, ListError> {
         let containers = backend().list_container(&namespace).await.map_err(|e| {
@@ -17,10 +33,12 @@ impl ContainerdProvider {
         })?;
         let mut statuses: Vec<Status> = Vec::new();
         for container in containers {
-            let endpoint = Endpoint {
-                function_name: container.id.clone(),
-                namespace: namespace.clone(),
+            // Only process faasd-managed containers
+            let endpoint = match parse_faasd_id(&container.id, &namespace) {
+                Some(ep) => ep,
+                None => continue,
             };
+
             let created_at = container.created_at.unwrap().to_string();
             let mut replicas = 0;
 
@@ -47,7 +65,6 @@ impl ContainerdProvider {
                 }
             }
 
-            // 大部分字段并未实现，使用None填充
             let status = Status {
                 function_name: endpoint.function_name,
                 namespace: Some(endpoint.namespace),

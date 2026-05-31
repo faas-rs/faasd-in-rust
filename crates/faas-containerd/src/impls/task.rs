@@ -1,8 +1,7 @@
-
 use containerd_client::{
     services::v1::{
         CreateTaskRequest, DeleteTaskRequest, GetRequest, KillRequest, ListTasksRequest,
-        ListTasksResponse, StartRequest, WaitRequest, WaitResponse,
+        WaitRequest, WaitResponse,
     },
     types::{Mount, v1::Process},
     with_namespace,
@@ -18,7 +17,6 @@ pub enum TaskError {
     NotFound,
     AlreadyExists,
     InvalidArgument,
-    // PermissionDenied,
     Internal(String),
 }
 
@@ -29,7 +27,6 @@ impl From<tonic::Status> for TaskError {
             NotFound => TaskError::NotFound,
             AlreadyExists => TaskError::AlreadyExists,
             InvalidArgument => TaskError::InvalidArgument,
-            // PermissionDenied => TaskError::PermissionDenied,
             _ => TaskError::Internal(status.message().to_string()),
         }
     }
@@ -37,20 +34,15 @@ impl From<tonic::Status> for TaskError {
 
 impl From<TaskError> for DeployError {
     fn from(e: TaskError) -> DeployError {
-        match e {
-            TaskError::InvalidArgument => DeployError::Invalid(e.to_string()),
-            _ => DeployError::Internal(e.to_string()),
-        }
+        DeployError::Internal(e.to_string())
     }
 }
 
 impl From<TaskError> for DeleteError {
     fn from(e: TaskError) -> DeleteError {
-        log::trace!("DeleteTaskError: {:?}", e);
         match e {
             TaskError::NotFound => DeleteError::NotFound(e.to_string()),
-            TaskError::InvalidArgument => DeleteError::Invalid(e.to_string()),
-            _ => DeleteError::Internal(e.to_string()),
+            e => DeleteError::Internal(e.to_string()),
         }
     }
 }
@@ -58,28 +50,20 @@ impl From<TaskError> for DeleteError {
 impl ContainerdService {
     /// 创建并启动任务
     pub async fn new_task(&self, mounts: Vec<Mount>, endpoint: &Endpoint) -> Result<(), TaskError> {
-        let Endpoint {
-            function_name: cid,
-            namespace: ns,
-        } = endpoint;
-        // let mounts = self.get_mounts(cid, ns).await?;
-        self.do_create_task(cid, ns, mounts).await?;
-        self.do_start_task(cid, ns).await?;
+        let cid = endpoint.to_string();
+        let ns = &endpoint.namespace;
+        self.do_create_task(&cid, ns, mounts).await?;
+        self.do_start_task(&cid, ns).await?;
         Ok(())
     }
 
     async fn do_start_task(&self, cid: &str, ns: &str) -> Result<(), TaskError> {
-        let mut c: containerd_client::services::v1::tasks_client::TasksClient<
-            tonic::transport::Channel,
-        > = self.client.tasks();
-        let req = StartRequest {
+        let mut c = self.client.tasks();
+        let start_request = containerd_client::services::v1::StartRequest {
             container_id: cid.to_string(),
             ..Default::default()
         };
-        let resp = c.start(with_namespace!(req, ns)).await?;
-        log::debug!("Task: {:?} started", cid);
-        log::trace!("Task start response: {:?}", resp);
-
+        c.start(with_namespace!(start_request, ns)).await?;
         Ok(())
     }
 
@@ -101,95 +85,92 @@ impl ContainerdService {
     }
 
     pub async fn get_task(&self, endpoint: &Endpoint) -> Result<Process, TaskError> {
-        let Endpoint {
-            function_name: cid,
-            namespace: ns,
-        } = endpoint;
         let mut tc = self.client.tasks();
-
         let req = GetRequest {
-            container_id: cid.clone(),
+            container_id: endpoint.to_string(),
             ..Default::default()
         };
-
-        let resp = tc.get(with_namespace!(req, ns)).await?;
-
+        let resp = tc.get(with_namespace!(req, endpoint.namespace)).await?;
         let task = resp.into_inner().process.ok_or(TaskError::NotFound)?;
-
         Ok(task)
     }
 
+    /// Check whether a task exists in containerd.
+    pub async fn task_exists(&self, endpoint: &Endpoint) -> bool {
+        self.get_task(endpoint).await.is_ok()
+    }
+
     #[allow(dead_code)]
-    async fn list_task_by_cid(&self, cid: &str, ns: &str) -> Result<ListTasksResponse, TaskError> {
-        let mut c = self.client.tasks();
-        let request = ListTasksRequest {
-            filter: format!("container=={}", cid),
+    async fn list_task_by_cid(
+        &self,
+        cid: &str,
+        ns: &str,
+    ) -> Result<containerd_client::services::v1::ListTasksResponse, TaskError> {
+        let mut tc = self.client.tasks();
+        let req = ListTasksRequest {
+            filter: format!("id=={}", cid),
         };
-        let response = c.list(with_namespace!(request, ns)).await?.into_inner();
-        Ok(response)
+        let resp = tc.list(with_namespace!(req, ns)).await?;
+        Ok(resp.into_inner())
     }
 
     async fn do_kill_task(&self, cid: &str, ns: &str) -> Result<(), TaskError> {
-        let mut c = self.client.tasks();
-        let kill_request = KillRequest {
+        let mut tc = self.client.tasks();
+        let req = KillRequest {
             container_id: cid.to_string(),
             signal: 15,
-            all: true,
             ..Default::default()
         };
-        c.kill(with_namespace!(kill_request, ns)).await?;
+        tc.kill(with_namespace!(req, ns)).await?;
         Ok(())
     }
 
     #[allow(dead_code)]
     async fn do_kill_task_force(&self, cid: &str, ns: &str) -> Result<(), TaskError> {
-        let mut c = self.client.tasks();
-        let kill_request = KillRequest {
+        let mut tc = self.client.tasks();
+        let req = KillRequest {
             container_id: cid.to_string(),
             signal: 9,
-            all: true,
             ..Default::default()
         };
-        c.kill(with_namespace!(kill_request, ns)).await?;
+        tc.kill(with_namespace!(req, ns)).await?;
         Ok(())
     }
 
     async fn do_delete_task(&self, cid: &str, ns: &str) -> Result<(), TaskError> {
-        let mut c = self.client.tasks();
-        let delete_request = DeleteTaskRequest {
+        let mut tc = self.client.tasks();
+        let req = DeleteTaskRequest {
             container_id: cid.to_string(),
         };
-        c.delete(with_namespace!(delete_request, ns)).await?;
+        tc.delete(with_namespace!(req, ns)).await?;
         Ok(())
     }
 
-    async fn do_wait_task(&self, cid: &str, ns: &str) -> Result<WaitResponse, TaskError> {
-        let mut c = self.client.tasks();
-        let wait_request = WaitRequest {
+    async fn do_wait_task(
+        &self,
+        cid: &str,
+        ns: &str,
+    ) -> Result<WaitResponse, TaskError> {
+        let mut tc = self.client.tasks();
+        let req = WaitRequest {
             container_id: cid.to_string(),
             ..Default::default()
         };
-        let resp = c
-            .wait(with_namespace!(wait_request, ns))
-            .await?
-            .into_inner();
-        Ok(resp)
+        let resp = tc.wait(with_namespace!(req, ns)).await?;
+        Ok(resp.into_inner())
     }
 
     /// 杀死并删除任务
     pub async fn kill_task_with_timeout(&self, endpoint: &Endpoint) -> Result<(), TaskError> {
-        let Endpoint {
-            function_name: cid,
-            namespace: ns,
-        } = endpoint;
-        let wait_future = self.do_wait_task(cid, ns);
-        self.do_kill_task(cid, ns).await?;
+        let cid = endpoint.to_string();
+        let ns = &endpoint.namespace;
+        let wait_future = self.do_wait_task(&cid, ns);
+        self.do_kill_task(&cid, ns).await?;
         match wait_future.await {
             Ok(_) => {
-                self.do_delete_task(cid, ns).await?;
+                self.do_delete_task(&cid, ns).await?;
             }
             Err(e) => {
-                // wait 报错
                 log::error!("Error while waiting for task {}: {:?}", cid, e);
                 return Err(e);
             }

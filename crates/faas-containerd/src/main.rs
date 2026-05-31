@@ -1,10 +1,10 @@
 //! faas-containerd entry point — asupersync runtime.
 //!
 //! Boots the asupersync Runtime, initializes the containerd gRPC backend,
-//! runs startup reconciliation, and serves the gateway HTTP server.
+//! and serves the gateway HTTP server.  containerd is the authoritative
+//! state machine; sled caches only IP addresses.
 
 use faas_containerd::consts::DEFAULT_FAASDRS_DATA_DIR;
-use faas_containerd::state::reconcile::Reconciler;
 
 fn main() {
     dotenv::dotenv().ok();
@@ -24,10 +24,6 @@ fn main() {
         // ── Init provider ───────────────────────────────────────────
         let provider =
             faas_containerd::provider::ContainerdProvider::new(DEFAULT_FAASDRS_DATA_DIR);
-
-        // ── Startup reconciliation ──────────────────────────────────
-        let reconciler = Reconciler::new(provider.state_store.clone());
-        reconciler.reconcile_all().await;
 
         // ── Start HTTP gateway ──────────────────────────────────────
         let port: u16 = std::env::var("PORT")
