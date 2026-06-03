@@ -73,131 +73,108 @@ Thread A (deploy)               sled                 Thread B (delete)
       │  returns Ok(true)        │                         │
       │                          │                         ├─ delete()
       │                          │                         ├─ cleanup_containerd_resources()
-      │                          │                         │  (runs directly on containerd,
+      │                          │                         │  (direct containerd calls,
       │                          │                         │   no sled CAS for delete path)
       │                          │                         │  kill / remove / delete — all
-      │                          │                         │  idempotent.  If task doesn't
-      │                          │                         │  exist (deploy hasn't created
-      │                          │                         │  it yet), NotFound → skip.
-      │                          │                         ├─ cache.remove() → deletes
-      │                          │                         │  InFlight key
+      │                          │                         │  idempotent.  NotFound → skip.
+      │                          │                         ├─ cache.remove() → Absent
       │                          │                         ├─ return Ok(())
       │                          │                         │
       ├─ ... continue deploy ... │                         │
       ├─ commit_deploy()         │                         │
       │  CAS InFlight→Cached ───►│                         │
       │  Err (key is Absent!)    │                         │
-      │  → internal error,       │                         │
-      │    cleanup triggers      │                         │
-      │                          │                         │
+      │  → Err branch runs       │                         │
+      │    release_deploy (nop)  │                         │
+      │    cleanup (nop)         │                         │
 ```
 
-**Race result**: Deploy's commit fails (sled key gone).  Deploy falls into
-Err branch, calls release_deploy (idempotent) + cleanup_containerd_resources
-(also idempotent — all resources already deleted).  The function ends up
-Absent in sled and deleted in containerd.  **Consistent outcome**: the delete
-wins, and deploy tears itself down cleanly.
-
-**Follow-up deploy**: If a third deploy arrives, it sees sled Absent →
-try_acquire_deploy succeeds → fresh deploy.
+**Race result**: Delete wins.  Deploy's commit fails (key gone) → Err branch
+runs idempotent cleanup → consistent Absent state in sled.
 
 ---
 
-## 3. Ctrl-C (SIGINT) During Deploy
+## 3. Ctrl-C (SIGINT) During Deploy — Graceful Shutdown
+
+main.rs registers `asupersync::signal::ctrl_c().await`.  The gateway runs as a
+background `handle.spawn()`, and block_on waits for the shutdown signal.
 
 ```
-faasd process
-      │
-      ├─ deploy() in progress
-      │  sled: InFlight
-      │  containerd: image pulled, container created, task running
+      ├─ deploy() in progress: InFlight acquired
+      ├─ do_deploy_impl() somewhere in steps 1-5
       │
       ├─ SIGINT received
-      ├─ asupersync runtime drains workers, drops all in-flight tasks
+      ├─ ctrl_c() future resolves
+      ├─ block_on returns → Runtime drops → close() called
       │
-      ├─ PROCESS EXITS
+      │  close():
+      │    ├─ begin_drain() on all regions
+      │    ├─ cancel all Cx
+      │    ├─ worker threads poll tasks to completion
+      │    │   ┌─ Current gRPC step completes (or 30s timeout)
+      │    │   ├─ next cx.checkpoint() → Cancelled
+      │    │   ├─ do_deploy_impl() returns Err(Cancelled)
+      │    │   ├─ deploy() Err branch:
+      │    │   │    release_deploy() → Absent
+      │    │   │    cleanup_containerd_resources()
+      │    │   │      each step: 10s timeout, Dirty on timeout
+      │    │   └─ return
+      │    ├─ begin_finalize()
+      │    └─ join worker threads
       │
       ▼
-   ┌─────────────────────────────────────────────┐
-   │ sled state:   InFlight (stale)              │
-   │ containerd:   image/container/task exist    │
-   │ CNI:          netns + IP allocated          │
-   └─────────────────────────────────────────────┘
-
-   On next startup:
-     1. Startup scan checks only Dirty records — InFlight is NOT Dirty.
-     2. Next deploy for same function: try_acquire_deploy fails (InFlight exists) → Conflict 409.
-     3. Manual intervention required: delete the function first.
+      sled: Absent (or Dirty if cleanup timed out)
+      containerd: clean (or partial if Dirty)
 ```
 
-**Known limitation**: The startup recovery only handles Dirty records.  Stale
-InFlight keys from a crash-before-commit are not automatically reclaimed.
-This is a design trade-off: InFlight keys prevent concurrent operations correctly,
-but a process crash leaks them.
-
-**Mitigation**: An operator tool could scan for InFlight keys older than N
-minutes and release them.  Or the startup scan could check InFlight age vs.
-process uptime and auto-release stale ones.  Not yet implemented.
-
-**Note on containerd**: The leftover container/task/image in containerd are
-NOT leaked — they're identified by the `faasdrs-{ns}-{fn}` prefix.  A
-subsequent delete call can find and remove them regardless of sled state.
+**Result**: Graceful drain ensures deploy cleanup runs.  InFlight → Absent.
+No stale lock.  Worst case: cleanup step times out → Dirty → startup recovery
+handles it.
 
 ---
 
-## 4. Ctrl-C (SIGINT) During Delete
+## 4. Ctrl-C (SIGINT) During Delete — Graceful Shutdown
+
+Same drain mechanism.  Delete has no CAS lock, so no stale lock risk
+regardless.  Partial cleanup during drain → startup recovery handles
+Dirty records if any step timed out.
 
 ```
-      ├─ delete() in progress
-      │  sled: Cached(ip) or Dirty(reason)
-      │  containerd: partial deletion (some resources removed, some still exist)
+      ├─ delete() / cleanup_containerd_resources() in progress
+      ├─ SIGINT → ctrl_c → close() → drain
       │
-      ├─ SIGINT → process exits
+      │  ┌─ Current step completes or times out (10s each)
+      │  ├─ Remaining steps run during drain
+      │  └─ cache.remove() runs if not Dirty
       │
       ▼
-   ┌─────────────────────────────────────────────┐
-   │ sled state:   Cached(ip) or Dirty (stale)   │
-   │ containerd:   partial state (some exist)    │
-   └─────────────────────────────────────────────┘
-
-   On next startup:
-     1. If sled marks Dirty → startup recovery runs cleanup_containerd_resources
-        (idempotent, each step tolerates NotFound).  Partial deletion continues.
-     2. If sled marks Cached but resources still exist → no recovery.  A new
-        delete call will clean up.
+      sled: Absent (or Dirty if step timed out)
+      containerd: clean (or partial if Dirty)
 ```
-
-**No lock blocking**: Delete doesn't use sled CAS.  No stale lock prevents
-future operations.
 
 ---
 
 ## 5. Panic During Deploy
 
 ```
-      ├─ do_deploy_impl() in progress
-      │  sled: InFlight
-      │  containerd: partial deployment state
-      │
-      ├─ panic!("...")
-      ├─ asupersync runtime catches panic at task boundary
-      ├─ future is DROPPED (no Err branch executed)
-      │
-      ├─ deploy() outer function also dropped — cleanup code never runs
+      ├─ do_deploy_impl() panic!("...")
+      ├─ asupersync catches panic at task boundary
+      ├─ future is DROPPED — no Err branch executed
+      ├─ release_deploy never runs
       │
       ▼
    ┌─────────────────────────────────────────────┐
-   │ sled state:   InFlight (stale)              │
-   │ containerd:   partial state                 │
-   │ CNI:          possibly leaked netns/IP      │
+   │ sled state:   InFlight (stale) ⚠️            │
+   │ containerd:   partial deployment state       │
+   │ CNI:          possibly leaked netns/IP       │
    └─────────────────────────────────────────────┘
 
-   Same as SIGINT case above.  Stale InFlight blocks future deploys.
+   Next deploy → Conflict 409.  Must manually delete or add stale-InFlight
+   cleanup to startup recovery.
 ```
 
-**Mitigation**: std::panic::catch_unwind around do_deploy_impl would catch
-the panic and run the cleanup path.  Not yet implemented — async + catch_unwind
-require `AssertUnwindSafe` and careful setup.
+Panic skips drain (unwind bypasses the Err match arm).  `std::panic::catch_unwind`
+around `do_deploy_impl` would fix this; not yet implemented.
 
 ---
 
@@ -268,41 +245,28 @@ require `AssertUnwindSafe` and careful setup.
    └─────────────────────────────────────────────┘
 ```
 
-**If deploy fails after delete succeeds**: Update returns 500.  Sled is Absent
-(delete cleared it).  Containerd resources are absent (delete cleared them).
-The function is gone — user must retry with a fresh deploy.
+**If deploy fails after delete succeeds**: Update returns 500.  Sled is Absent,
+containerd clean.  Function is gone — user must retry with fresh deploy.
 
-**If delete times out**: Steps get marked Dirty.  Deploy's try_acquire_deploy
-may see InFlight (stale from prior delete?  No — delete doesn't use CAS lock).
-Actually, delete doesn't use CAS at all.  So if delete produces Dirty records,
-deploy proceeds independently.  The Dirty record for the old deployment
-coexists with a fresh Cached record for the new deployment — no conflict,
-different sled keys (Dirty uses TAG_DIRTY, Cached uses TAG_CACHED).
-
-Wait — they share the same key name.  If delete's cleanup timed out, the
-sled key was marked Dirty (TAG_DIRTY).  Then update calls delete (skips
-cache.remove because is_dirty), then calls deploy: try_acquire_deploy sees
-the key exists (TAG_DIRTY) → Conflict.
-
-**Gap**: Update fails if delete left a Dirty record.  The operator must
-manually clean up.
+**If delete leaves Dirty**: Update's deploy sees key exists (TAG_DIRTY) →
+try_acquire_deploy → Conflict.  Must manually clean up the Dirty record first.
 
 ---
 
 ## Summary Table
 
-| Event | sled state after | containerd after | Future ops blocked? |
+| Event | sled after | containerd after | Future ops blocked? |
 |---|---|---|---|
 | Deploy success | Cached(ip) | running | No |
 | Delete success | Absent | clean | No |
-| Client disconnect during deploy | Absent (released) | cleaned up | No |
-| Delete during deploy (race) | Absent (delete wins) | cleaned up | No |
-| Deploy → gRPC timeout → cleanup timeout | Dirty(reason) | partial, marked Dirty | Yes (InFlight → cleanup tried; Dirty present) |
-| SIGINT during deploy | InFlight (stale) ⚠️ | partial state ⚠️ | **Yes — InFlight blocks future deploys** |
-| SIGINT during delete | Cached or Dirty | partial state | No (delete has no CAS lock) |
-| Panic during deploy | InFlight (stale) ⚠️ | partial state ⚠️ | **Yes — InFlight blocks future deploys** |
-| Panic during delete | Cached or Dirty | partial state | No |
-| Update: delete OK, deploy fails | Absent | clean | No (function is gone) |
-| Update: delete → Dirty, deploy fails | Dirty | partial | **Yes (Dirty key blocks deploy)** |
+| Client disconnect | Absent | cleaned up | No |
+| Delete during deploy | Absent (delete wins) | cleaned up | No |
+| gRPC timeout → cleanup timeout | Dirty(reason) | partial | Yes (Dirty blocks deploy) |
+| SIGINT during deploy | Absent (drain) | cleaned up | No |
+| SIGINT during delete | Absent or Dirty | clean or partial | No (or Dirty blocks deploy) |
+| Panic during deploy | InFlight (stale) ⚠️ | partial ⚠️ | **Yes** |
+| Panic during delete | Cached or Dirty | partial | No |
+| Update: delete OK, deploy fails | Absent | clean | No (function gone) |
+| Update: delete → Dirty | Dirty | partial | **Yes** (Dirty blocks deploy) |
 
-⚠️ = known gap: stale InFlight keys from crashes are not auto-recovered.
+⚠️ = panic unwinds past cleanup; `catch_unwind` around `do_deploy_impl` would fix.

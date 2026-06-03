@@ -6,6 +6,9 @@
 //!
 //! On startup, scans sled for Dirty records (from prior-iteration timeouts
 //! where cleanup couldn't complete) and attempts recovery.
+//!
+//! Graceful shutdown via SIGINT/SIGTERM: ctrl_c() cancels all Cx, the
+//! runtime drains in-flight deploy/delete tasks (cleanup runs), then exits.
 
 use faas_containerd::consts::DEFAULT_FAASDRS_DATA_DIR;
 
@@ -28,8 +31,6 @@ fn main() {
         let provider = faas_containerd::provider::ContainerdProvider::new(DEFAULT_FAASDRS_DATA_DIR);
 
         // ── Startup recovery: scan Dirty records ────────────────────
-        // Dirty records represent functions whose cleanup timed out in a
-        // prior process lifetime.  Attempt recovery before accepting traffic.
         let mut recovered = 0usize;
         let mut unrecovered = 0usize;
 
@@ -44,10 +45,8 @@ fn main() {
                         record.dirty_at
                     );
 
-                    // Attempt recovery: delete any leftover containerd resources
                     provider.recover_dirty(&endpoint, &record.reason).await;
 
-                    // Check if still dirty after recovery attempt
                     if provider.cache.is_dirty(&endpoint).unwrap_or(false) {
                         unrecovered += 1;
                         log::error!(
@@ -76,15 +75,28 @@ fn main() {
             );
         }
 
-        // ── Start HTTP gateway ──────────────────────────────────────
         let port: u16 = std::env::var("PORT")
             .ok()
             .and_then(|p| p.parse().ok())
             .unwrap_or(8080);
 
-        if let Err(e) = gateway::serve(provider, port, &handle).await {
-            log::error!("Gateway server error: {e}");
-            std::process::exit(1);
-        }
+        // ── Start HTTP gateway (background) ─────────────────────────
+        let gw_handle = handle.clone();
+        let gw_provider = provider.clone();
+        let _gateway = handle.spawn(async move {
+            if let Err(e) = gateway::serve(gw_provider, port, &gw_handle).await {
+                log::error!("Gateway server error: {e}");
+                std::process::exit(1);
+            }
+        });
+
+        // ── Wait for shutdown signal ────────────────────────────────
+        // ctrl_c cancels all Cx → every cx.checkpoint() returns
+        // Cancelled → deploy/delete cleanup runs during drain →
+        // release_deploy + cleanup_containerd_resources → clean exit.
+        asupersync::signal::ctrl_c()
+            .await
+            .unwrap_or_else(|e| log::error!("ctrl_c signal error: {e}"));
+        log::info!("Received shutdown signal, draining...");
     });
 }
