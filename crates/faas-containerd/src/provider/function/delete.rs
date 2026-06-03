@@ -8,6 +8,13 @@ use crate::provider::ContainerdProvider;
 use crate::state::CacheStore;
 use gateway::types::{DeleteError, Query};
 
+/// Release the netns lock for an endpoint. Idempotent — no-op if netns absent.
+async fn release_netns_lock(endpoint: &Endpoint) {
+    if let Ok(ns) = netns_rs::NetNs::get(endpoint.to_string()) {
+        ns.remove().ok();
+    }
+}
+
 /// Per-step timeout for cleanup operations.  Each step gets this budget;
 /// if it expires the step is marked Dirty and we proceed to the next step.
 const CLEANUP_STEP_TIMEOUT: Duration = Duration::from_secs(10);
@@ -15,7 +22,7 @@ const CLEANUP_STEP_TIMEOUT: Duration = Duration::from_secs(10);
 /// Containerd-driven resource cleanup.  Idempotent — every step tolerates
 /// NotFound.  Each step is individually time-bounded; a hung containerd
 /// operation marks the endpoint Dirty in sled and continues.
-pub(crate) async fn cleanup_containerd_resources(cache: &CacheStore, endpoint: &Endpoint) {
+pub async fn cleanup_containerd_resources(cache: &CacheStore, endpoint: &Endpoint) {
     // Task
     if backend().task_exists(endpoint).await {
         let fut = backend().kill_task_with_timeout(endpoint);
@@ -76,6 +83,9 @@ impl ContainerdProvider {
 
         cleanup_containerd_resources(&self.cache, &endpoint).await;
 
+        // Release netns lock — always, regardless of cleanup outcome.
+        release_netns_lock(&endpoint).await;
+
         // Clear IP cache (non-Dirty entries only)
         // Remove cache entry unless it's Dirty (audit trail preserved)
         if !self.cache.is_dirty(&endpoint).unwrap_or(false)
@@ -93,6 +103,9 @@ impl ContainerdProvider {
     /// the sled record if successful.  The caller handles retries.
     pub async fn recover_dirty(&self, endpoint: &Endpoint, _reason: &str) {
         cleanup_containerd_resources(&self.cache, endpoint).await;
+
+        // Release any stray netns that might be holding a lock.
+        release_netns_lock(endpoint).await;
 
         // If cleanup cleared the containerd resources, also clear sled
         if self.cache.is_dirty(endpoint).unwrap_or(true) {

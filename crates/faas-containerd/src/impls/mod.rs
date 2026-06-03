@@ -17,7 +17,7 @@ use crate::tonic_bridge;
 
 pub static __BACKEND: OnceLock<ContainerdService> = OnceLock::new();
 
-pub(crate) fn backend() -> &'static ContainerdService {
+pub fn backend() -> &'static ContainerdService {
     __BACKEND.get().unwrap()
 }
 

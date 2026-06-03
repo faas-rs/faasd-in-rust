@@ -33,11 +33,93 @@ pub struct NetworkError {
     pub msg: String,
 }
 
-// ── Bracket: acquire CNI bridge, run f, auto-cleanup on error ──────────
-///
-/// After `cni_add_bridge` succeeds, any resource acquired (bridge + netns)
-/// must be released on error. On success, the caller keeps ownership and
-/// cleanup is suppressed.
+// ── Netns helpers ────────────────────────────────────────────────────────
+
+/// Read the IP address from a live netns by running `ip addr show` inside it.
+/// Returns None if the netns doesn't exist or no IP can be parsed.
+pub fn netns_get_ip(endpoint: &Endpoint) -> Option<IpAddr> {
+    let ns = NetNs::get(endpoint.to_string()).ok()?;
+    ns.run(|_| {
+        use std::process::Command;
+        let output = Command::new("ip")
+            .args(["-4", "-br", "addr", "show", "scope", "global"])
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        // Output: "eth0    UP    10.66.0.5/16 ..."
+        for line in stdout.lines() {
+            for word in line.split_whitespace() {
+                if let Some(slash) = word.find('/') {
+                    return word[..slash].parse().ok();
+                }
+            }
+        }
+        None
+    })
+    .ok()
+    .flatten()
+}
+
+/// Open a netns by name. Returns None if it doesn't exist.
+#[inline]
+pub fn netns_for_endpoint(endpoint: &Endpoint) -> Option<NetNs> {
+    NetNs::get(endpoint.to_string()).ok()
+}
+
+// ── CNI network lifecycle ────────────────────────────────────────────────
+
+/// Set up CNI networking inside an **already-existing** netns.
+/// Used during deploy when the netns was created by the bracket acquire phase.
+pub fn setup_cni_network(endpoint: &Endpoint) -> Result<IpAddr, NetworkError> {
+    let ns = NetNs::get(endpoint.to_string()).map_err(|e| NetworkError {
+        msg: format!("Netns not found for {endpoint}: {e}"),
+    })?;
+
+    let output = cmd::cni_add_bridge(ns.path(), DEFAULT_NETWORK_NAME).map_err(|e| {
+        NetworkError {
+            msg: format!("Failed to add CNI bridge: {e}"),
+        }
+    })?;
+
+    if !output.status.success() {
+        return Err(NetworkError {
+            msg: format!(
+                "Failed to add CNI bridge: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ),
+        });
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut json: Value = serde_json::from_str(&stdout).map_err(|e| NetworkError {
+        msg: format!("Failed to parse CNI JSON: {e}"),
+    })?;
+
+    log::trace!("CNI add bridge output: {:?}", json);
+    let ips = json["ips"].take();
+
+    let arr = match ips {
+        Value::Array(arr) if !arr.is_empty() => arr,
+        _ => return Err(NetworkError { msg: "No IP address found in CNI output".into() }),
+    };
+
+    let ip: IpAddr = arr[0]["address"]
+        .as_str()
+        .and_then(|s| {
+            let slash = s.find('/')?;
+            s[..slash].parse().ok()
+        })
+        .ok_or_else(|| NetworkError { msg: "Failed to parse IP address".into() })?;
+
+    log::trace!("CNI network configured with IP: {:?}", ip);
+    Ok(ip)
+}
+
+/// Full cycle: create netns + bridge + parse IP. Returns owned netns.
+/// Used by legacy paths; new code uses `setup_cni_network` with pre-existing netns.
 pub fn create_cni_network(
     cx: &asupersync::Cx,
     endpoint: &Endpoint,
@@ -54,9 +136,7 @@ pub fn create_cni_network(
         Ok(o) => o,
         Err(e) => {
             net_ns.remove().ok();
-            return Err(NetworkError {
-                msg: format!("Failed to add CNI bridge: {e}"),
-            });
+            return Err(NetworkError { msg: format!("Failed to add CNI bridge: {e}") });
         }
     };
 
@@ -69,26 +149,24 @@ pub fn create_cni_network(
             ),
         });
     }
-    // ── Bridge acquired; every error path cleans up bridge + netns ──
+
     let stdout = String::from_utf8_lossy(&output.stdout);
     let mut json: Value = match serde_json::from_str(&stdout) {
         Ok(j) => j,
         Err(e) => {
             let _ = cmd::cni_del_bridge(net_ns.path(), DEFAULT_NETWORK_NAME);
             net_ns.remove().ok();
-            return Err(NetworkError {
-                msg: format!("Failed to parse CNI JSON: {e}"),
-            });
+            return Err(NetworkError { msg: format!("Failed to parse CNI JSON: {e}") });
         }
     };
 
     log::trace!("CNI add bridge output: {:?}", json);
     let ips = json["ips"].take();
     let ip_list = match ips {
-        Value::Array(ref arr) if !arr.is_empty() => {
+        Value::Array(arr) if !arr.is_empty() => {
             let mut list = Vec::with_capacity(arr.len());
             for ip in arr {
-                if let Value::String(ref ip_str) = ip["address"] {
+                if let Value::String(ip_str) = &ip["address"] {
                     list.push(ip_str.parse::<cidr::IpInet>().map_err(|e| NetworkError {
                         msg: format!("Failed to parse IP address: {}", e),
                     })?);
@@ -96,11 +174,7 @@ pub fn create_cni_network(
             }
             list
         }
-        _ => {
-            return Err(NetworkError {
-                msg: "No IP address found in CNI output".to_string(),
-            });
-        }
+        _ => return Err(NetworkError { msg: "No IP address found in CNI output".into() }),
     };
 
     if ip_list.len() > 1 {
