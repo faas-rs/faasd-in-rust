@@ -2,11 +2,14 @@ use containerd_client::{
     services::v1::{Container, DeleteContainerRequest, GetContainerRequest, ListContainersRequest},
     with_namespace,
 };
+use std::time::Duration;
 
 use derive_more::Display;
 
 use containerd_client::services::v1::container::Runtime;
 use tonic::Request;
+
+use asupersync::time::{timeout, wall_now};
 
 use super::{ContainerdService, backend, cni::Endpoint, function::ContainerStaticMetadata};
 
@@ -14,8 +17,10 @@ use super::{ContainerdService, backend, cni::Endpoint, function::ContainerStatic
 pub enum ContainerError {
     NotFound,
     AlreadyExists,
-    Internal,
+    Internal(String),
 }
+
+const GRPC_TIMEOUT: Duration = Duration::from_secs(30);
 
 impl ContainerdService {
     /// 创建容器
@@ -33,7 +38,7 @@ impl ContainerdService {
             }),
             spec: Some(backend().get_spec(metadata).await.map_err(|_| {
                 log::error!("Failed to get spec");
-                ContainerError::Internal
+                ContainerError::Internal("get spec failed".into())
             })?),
             snapshotter: crate::consts::DEFAULT_SNAPSHOTTER.to_string(),
             snapshot_key: cid,
@@ -45,15 +50,21 @@ impl ContainerdService {
             container: Some(container),
         };
 
-        let resp = cc
-            .create(with_namespace!(req, metadata.endpoint.namespace))
-            .await
-            .map_err(|e| {
-                log::error!("Failed to create container: {}", e);
-                ContainerError::Internal
-            })?;
+        let resp = timeout(
+            wall_now(),
+            GRPC_TIMEOUT,
+            cc.create(with_namespace!(req, metadata.endpoint.namespace)),
+        )
+        .await
+        .map_err(|_| ContainerError::Internal("create_container timeout".into()))?
+        .map_err(|e| {
+            log::error!("Failed to create container: {}", e);
+            ContainerError::Internal(e.to_string())
+        })?;
 
-        resp.into_inner().container.ok_or(ContainerError::Internal)
+        resp.into_inner()
+            .container
+            .ok_or(ContainerError::Internal("no container in response".into()))
     }
 
     /// 删除容器
@@ -62,13 +73,18 @@ impl ContainerdService {
         let delete_request = DeleteContainerRequest {
             id: endpoint.to_string(),
         };
-        cc.delete(with_namespace!(delete_request, endpoint.namespace))
-            .await
-            .map_err(|e| {
-                log::error!("Failed to delete container: {}", e);
-                ContainerError::Internal
-            })
-            .map(|_| ())
+        timeout(
+            wall_now(),
+            GRPC_TIMEOUT,
+            cc.delete(with_namespace!(delete_request, endpoint.namespace)),
+        )
+        .await
+        .map_err(|_| ContainerError::Internal("delete_container timeout".into()))?
+        .map_err(|e| {
+            log::error!("Failed to delete container: {}", e);
+            ContainerError::Internal(e.to_string())
+        })
+        .map(|_| ())
     }
 
     /// 根据查询条件加载容器参数
@@ -77,13 +93,17 @@ impl ContainerdService {
         let request = GetContainerRequest {
             id: endpoint.to_string(),
         };
-        let resp = cc
-            .get(with_namespace!(request, endpoint.namespace))
-            .await
-            .map_err(|e| {
-                log::error!("Failed to load container: {}", e);
-                ContainerError::Internal
-            })?;
+        let resp = timeout(
+            wall_now(),
+            GRPC_TIMEOUT,
+            cc.get(with_namespace!(request, endpoint.namespace)),
+        )
+        .await
+        .map_err(|_| ContainerError::Internal("get_container timeout".into()))?
+        .map_err(|e| {
+            log::error!("Failed to load container: {}", e);
+            ContainerError::Internal(e.to_string())
+        })?;
         resp.into_inner().container.ok_or(ContainerError::NotFound)
     }
 
@@ -93,23 +113,31 @@ impl ContainerdService {
         let request = GetContainerRequest {
             id: endpoint.to_string(),
         };
-        cc.get(with_namespace!(request, endpoint.namespace))
-            .await
-            .is_ok()
+        timeout(
+            wall_now(),
+            GRPC_TIMEOUT,
+            cc.get(with_namespace!(request, endpoint.namespace)),
+        )
+        .await
+        .is_ok()
     }
 
     /// 获取容器列表
     pub async fn list_container(&self, namespace: &str) -> Result<Vec<Container>, ContainerError> {
         let mut cc = self.client.containers();
         let request = ListContainersRequest { filters: vec![] };
-        let resp = cc
-            .list(with_namespace!(request, namespace))
-            .await
-            .map_err(|e| {
-                log::error!("Failed to list containers: {}", e);
-                ContainerError::Internal
-            })?
-            .into_inner();
+        let resp = timeout(
+            wall_now(),
+            GRPC_TIMEOUT,
+            cc.list(with_namespace!(request, namespace)),
+        )
+        .await
+        .map_err(|_| ContainerError::Internal("list_containers timeout".into()))?
+        .map_err(|e| {
+            log::error!("Failed to list containers: {}", e);
+            ContainerError::Internal(e.to_string())
+        })?
+        .into_inner();
         Ok(resp.containers)
     }
 

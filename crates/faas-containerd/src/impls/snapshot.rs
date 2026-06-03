@@ -3,11 +3,16 @@ use containerd_client::{
     types::Mount,
     with_namespace,
 };
+use std::time::Duration;
 use tonic::Request;
+
+use asupersync::time::{timeout, wall_now};
 
 use crate::impls::error::ContainerdError;
 
 use super::{ContainerdService, cni::Endpoint, function::ContainerStaticMetadata};
+
+const GRPC_TIMEOUT: Duration = Duration::from_secs(30);
 
 impl ContainerdService {
     #[allow(unused)]
@@ -21,15 +26,19 @@ impl ContainerdService {
             snapshotter: crate::consts::DEFAULT_SNAPSHOTTER.to_string(),
             key: cid.to_string(),
         };
-        let mounts = sc
-            .mounts(with_namespace!(req, ns))
-            .await
-            .map_err(|e| {
-                log::error!("Failed to get mounts: {}", e);
-                ContainerdError::DeleteContainerError(e.to_string())
-            })?
-            .into_inner()
-            .mounts;
+        let mounts = timeout(
+            wall_now(),
+            GRPC_TIMEOUT,
+            sc.mounts(with_namespace!(req, ns)),
+        )
+        .await
+        .map_err(|_| ContainerdError::GetParentSnapshotError("mounts timeout".into()))?
+        .map_err(|e| {
+            log::error!("Failed to get mounts: {}", e);
+            ContainerdError::DeleteContainerError(e.to_string())
+        })?
+        .into_inner()
+        .mounts;
 
         Ok(mounts)
     }
@@ -57,13 +66,17 @@ impl ContainerdService {
             ..Default::default()
         };
         let mut client = self.client.snapshots();
-        let resp = client
-            .prepare(with_namespace!(req, ns))
-            .await
-            .map_err(|e| {
-                log::error!("Failed to prepare snapshot: {}", e);
-                ContainerdError::CreateSnapshotError(e.to_string())
-            })?;
+        let resp = timeout(
+            wall_now(),
+            GRPC_TIMEOUT,
+            client.prepare(with_namespace!(req, ns)),
+        )
+        .await
+        .map_err(|_| ContainerdError::CreateSnapshotError("prepare_snapshot timeout".into()))?
+        .map_err(|e| {
+            log::error!("Failed to prepare snapshot: {}", e);
+            ContainerdError::CreateSnapshotError(e.to_string())
+        })?;
 
         log::trace!("Prepare snapshot response: {:?}", resp);
 
@@ -83,14 +96,18 @@ impl ContainerdService {
             filters: vec!["parent==".to_string()],
         };
 
-        let mut stream = sc
-            .list(with_namespace!(ls_req, namespace))
-            .await
-            .map_err(|e| {
-                log::error!("Failed to list snapshots: {}", e);
-                ContainerdError::GetParentSnapshotError(e.to_string())
-            })?
-            .into_inner();
+        let mut stream = timeout(
+            wall_now(),
+            GRPC_TIMEOUT,
+            sc.list(with_namespace!(ls_req, namespace)),
+        )
+        .await
+        .map_err(|_| ContainerdError::GetParentSnapshotError("list_snapshots timeout".into()))?
+        .map_err(|e| {
+            log::error!("Failed to list snapshots: {}", e);
+            ContainerdError::GetParentSnapshotError(e.to_string())
+        })?
+        .into_inner();
 
         let mut infos: Vec<containerd_client::services::v1::snapshots::Info> = Vec::new();
         while let Some(msg) = stream
@@ -115,8 +132,14 @@ impl ContainerdService {
                 snapshotter: crate::consts::DEFAULT_SNAPSHOTTER.to_string(),
                 key: info.name.clone(),
             };
-            if let Err(e) = sc.remove(with_namespace!(rm_req, namespace)).await {
-                log::warn!("Failed to remove old snapshot {}: {}", info.name, e);
+            if let Err(e) = timeout(
+                wall_now(),
+                GRPC_TIMEOUT,
+                sc.remove(with_namespace!(rm_req, namespace)),
+            )
+            .await
+            {
+                log::warn!("Failed to remove old snapshot {}: {:?}", info.name, e);
             }
         }
 
@@ -130,12 +153,19 @@ impl ContainerdService {
             parent: String::new(),
             ..Default::default()
         };
-        sc.prepare(with_namespace!(prepare_req, namespace))
-            .await
-            .map_err(|e| {
-                log::error!("Failed to prepare parent snapshot: {}", e);
-                ContainerdError::GetParentSnapshotError(e.to_string())
-            })?;
+        timeout(
+            wall_now(),
+            GRPC_TIMEOUT,
+            sc.prepare(with_namespace!(prepare_req, namespace)),
+        )
+        .await
+        .map_err(|_| {
+            ContainerdError::GetParentSnapshotError("prepare_parent_snapshot timeout".into())
+        })?
+        .map_err(|e| {
+            log::error!("Failed to prepare parent snapshot: {}", e);
+            ContainerdError::GetParentSnapshotError(e.to_string())
+        })?;
 
         Ok(parent_key)
     }
@@ -146,12 +176,17 @@ impl ContainerdService {
             snapshotter: crate::consts::DEFAULT_SNAPSHOTTER.to_string(),
             key: endpoint.to_string(),
         };
-        sc.remove(with_namespace!(req, endpoint.namespace))
-            .await
-            .map_err(|e| {
-                log::error!("Failed to remove snapshot: {}", e);
-                ContainerdError::DeleteContainerError(e.to_string())
-            })?;
+        timeout(
+            wall_now(),
+            GRPC_TIMEOUT,
+            sc.remove(with_namespace!(req, endpoint.namespace)),
+        )
+        .await
+        .map_err(|_| ContainerdError::DeleteContainerError("remove_snapshot timeout".into()))?
+        .map_err(|e| {
+            log::error!("Failed to remove snapshot: {}", e);
+            ContainerdError::DeleteContainerError(e.to_string())
+        })?;
 
         Ok(())
     }
@@ -163,8 +198,12 @@ impl ContainerdService {
             snapshotter: crate::consts::DEFAULT_SNAPSHOTTER.to_string(),
             key: endpoint.to_string(),
         };
-        sc.mounts(with_namespace!(req, endpoint.namespace))
-            .await
-            .is_ok()
+        timeout(
+            wall_now(),
+            GRPC_TIMEOUT,
+            sc.mounts(with_namespace!(req, endpoint.namespace)),
+        )
+        .await
+        .is_ok()
     }
 }

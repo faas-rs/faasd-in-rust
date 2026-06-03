@@ -3,6 +3,9 @@
 //! Boots the asupersync Runtime, initializes the containerd gRPC backend,
 //! and serves the gateway HTTP server.  containerd is the authoritative
 //! state machine; sled caches only IP addresses.
+//!
+//! On startup, scans sled for Dirty records (from prior-iteration timeouts
+//! where cleanup couldn't complete) and attempts recovery.
 
 use faas_containerd::consts::DEFAULT_FAASDRS_DATA_DIR;
 
@@ -23,6 +26,55 @@ fn main() {
 
         // ── Init provider ───────────────────────────────────────────
         let provider = faas_containerd::provider::ContainerdProvider::new(DEFAULT_FAASDRS_DATA_DIR);
+
+        // ── Startup recovery: scan Dirty records ────────────────────
+        // Dirty records represent functions whose cleanup timed out in a
+        // prior process lifetime.  Attempt recovery before accepting traffic.
+        let mut recovered = 0usize;
+        let mut unrecovered = 0usize;
+
+        for res in provider.cache.iter_dirty() {
+            match res {
+                Ok((endpoint, record)) => {
+                    log::warn!(
+                        "dirty record: {}, reason={}, attempts={}, dirty_at={}",
+                        endpoint,
+                        record.reason,
+                        record.attempts,
+                        record.dirty_at
+                    );
+
+                    // Attempt recovery: delete any leftover containerd resources
+                    provider.recover_dirty(&endpoint, &record.reason).await;
+
+                    // Check if still dirty after recovery attempt
+                    if provider.cache.is_dirty(&endpoint).unwrap_or(false) {
+                        unrecovered += 1;
+                        log::error!(
+                            "recovery failed for {}, reason={}, attempts={}",
+                            endpoint,
+                            record.reason,
+                            record.attempts.saturating_add(1)
+                        );
+                        provider.cache.increment_dirty_attempts(&endpoint).ok();
+                    } else {
+                        recovered += 1;
+                        log::info!("recovered dirty record: {}", endpoint);
+                    }
+                }
+                Err(e) => {
+                    log::error!("error iterating dirty records: {}", e);
+                }
+            }
+        }
+
+        if recovered > 0 || unrecovered > 0 {
+            log::warn!(
+                "startup recovery: {} recovered, {} still dirty",
+                recovered,
+                unrecovered
+            );
+        }
 
         // ── Start HTTP gateway ──────────────────────────────────────
         let port: u16 = std::env::var("PORT")

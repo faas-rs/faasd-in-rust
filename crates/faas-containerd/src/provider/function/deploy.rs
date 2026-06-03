@@ -4,8 +4,6 @@ use crate::provider::ContainerdProvider;
 use crate::state::CacheRecord;
 use gateway::types::{DeployError, Deployment};
 
-use super::delete;
-
 impl ContainerdProvider {
     /// Idempotent deploy with CAS serialization.
     ///
@@ -53,7 +51,7 @@ impl ContainerdProvider {
             Err(_) => {
                 log::warn!("Deploy failed for {}, cleaning up", endpoint);
                 self.cache.release_deploy(endpoint).ok();
-                delete::delete_containerd_resources(endpoint).await;
+                self.cleanup_containerd_resources(endpoint).await;
             }
         }
 

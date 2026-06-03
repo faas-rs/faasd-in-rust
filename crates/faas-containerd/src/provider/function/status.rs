@@ -16,7 +16,7 @@ impl ContainerdProvider {
             );
             match e {
                 ContainerError::NotFound => ResolveError::NotFound(e.to_string()),
-                ContainerError::Internal => ResolveError::Internal(e.to_string()),
+                ContainerError::Internal(_) => ResolveError::Internal(e.to_string()),
                 _ => ResolveError::Invalid(e.to_string()),
             }
         })?;

@@ -8,9 +8,14 @@ use containerd_client::{
 };
 use derive_more::Display;
 use gateway::types::{DeleteError, DeployError};
+use std::time::Duration;
 use tonic::Request;
 
+use asupersync::time::{timeout, wall_now};
+
 use super::{ContainerdService, cni::Endpoint};
+
+const GRPC_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Display)]
 pub enum TaskError {
@@ -63,7 +68,14 @@ impl ContainerdService {
             container_id: cid.to_string(),
             ..Default::default()
         };
-        c.start(with_namespace!(start_request, ns)).await?;
+        timeout(
+            wall_now(),
+            GRPC_TIMEOUT,
+            c.start(with_namespace!(start_request, ns)),
+        )
+        .await
+        .map_err(|_| TaskError::Internal("start_task timeout".into()))?
+        .map_err(TaskError::from)?;
         Ok(())
     }
 
@@ -79,7 +91,14 @@ impl ContainerdService {
             rootfs,
             ..Default::default()
         };
-        let _resp = tc.create(with_namespace!(create_request, ns)).await?;
+        let _resp = timeout(
+            wall_now(),
+            GRPC_TIMEOUT,
+            tc.create(with_namespace!(create_request, ns)),
+        )
+        .await
+        .map_err(|_| TaskError::Internal("create_task timeout".into()))?
+        .map_err(TaskError::from)?;
 
         Ok(())
     }
@@ -90,7 +109,14 @@ impl ContainerdService {
             container_id: endpoint.to_string(),
             ..Default::default()
         };
-        let resp = tc.get(with_namespace!(req, endpoint.namespace)).await?;
+        let resp = timeout(
+            wall_now(),
+            GRPC_TIMEOUT,
+            tc.get(with_namespace!(req, endpoint.namespace)),
+        )
+        .await
+        .map_err(|_| TaskError::Internal("get_task timeout".into()))?
+        .map_err(TaskError::from)?;
         let task = resp.into_inner().process.ok_or(TaskError::NotFound)?;
         Ok(task)
     }
@@ -110,7 +136,10 @@ impl ContainerdService {
         let req = ListTasksRequest {
             filter: format!("id=={}", cid),
         };
-        let resp = tc.list(with_namespace!(req, ns)).await?;
+        let resp = timeout(wall_now(), GRPC_TIMEOUT, tc.list(with_namespace!(req, ns)))
+            .await
+            .map_err(|_| TaskError::Internal("list_tasks timeout".into()))?
+            .map_err(TaskError::from)?;
         Ok(resp.into_inner())
     }
 
@@ -121,7 +150,10 @@ impl ContainerdService {
             signal: 15,
             ..Default::default()
         };
-        tc.kill(with_namespace!(req, ns)).await?;
+        timeout(wall_now(), GRPC_TIMEOUT, tc.kill(with_namespace!(req, ns)))
+            .await
+            .map_err(|_| TaskError::Internal("kill_task timeout".into()))?
+            .map_err(TaskError::from)?;
         Ok(())
     }
 
@@ -133,7 +165,10 @@ impl ContainerdService {
             signal: 9,
             ..Default::default()
         };
-        tc.kill(with_namespace!(req, ns)).await?;
+        timeout(wall_now(), GRPC_TIMEOUT, tc.kill(with_namespace!(req, ns)))
+            .await
+            .map_err(|_| TaskError::Internal("kill_task_force timeout".into()))?
+            .map_err(TaskError::from)?;
         Ok(())
     }
 
@@ -142,7 +177,14 @@ impl ContainerdService {
         let req = DeleteTaskRequest {
             container_id: cid.to_string(),
         };
-        tc.delete(with_namespace!(req, ns)).await?;
+        timeout(
+            wall_now(),
+            GRPC_TIMEOUT,
+            tc.delete(with_namespace!(req, ns)),
+        )
+        .await
+        .map_err(|_| TaskError::Internal("delete_task timeout".into()))?
+        .map_err(TaskError::from)?;
         Ok(())
     }
 
@@ -152,7 +194,10 @@ impl ContainerdService {
             container_id: cid.to_string(),
             ..Default::default()
         };
-        let resp = tc.wait(with_namespace!(req, ns)).await?;
+        let resp = timeout(wall_now(), GRPC_TIMEOUT, tc.wait(with_namespace!(req, ns)))
+            .await
+            .map_err(|_| TaskError::Internal("wait_task timeout".into()))?
+            .map_err(TaskError::from)?;
         Ok(resp.into_inner())
     }
 
