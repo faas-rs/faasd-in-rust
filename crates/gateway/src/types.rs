@@ -35,6 +35,10 @@ pub enum ResolveError {
     Invalid(String),
     #[display("Internal: {}", _0)]
     Internal(String),
+    #[display("Busy: {}", _0)]
+    Busy(String),
+    #[display("Unavailable: {}", _0)]
+    Unavailable(String),
 }
 
 #[derive(Debug, Display)]
@@ -201,8 +205,6 @@ pub struct Query {
 
     /// Namespace of deployed function
     pub namespace: Option<String>,
-    /// When true, skip sled cache and consult netns ground truth for IP resolution.
-    pub cache_miss: bool,
 }
 
 /// TODO: 其实应该是 try from, 排除非法的函数名
@@ -214,13 +216,11 @@ impl FromStr for Query {
             Self {
                 function_name: function_name[..index].to_string(),
                 namespace: Some(function_name[index + 1..].to_string()),
-                cache_miss: false,
             }
         } else {
             Self {
                 function_name: function_name.to_string(),
                 namespace: Some("default".to_string()),
-                cache_miss: false,
             }
         })
     }

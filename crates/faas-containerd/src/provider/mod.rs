@@ -1,24 +1,22 @@
 pub mod function;
-use std::net::IpAddr;
-use std::sync::Mutex;
 use std::{collections::HashMap, path::Path, sync::Arc};
 
 use gateway::provider::Provider;
 use gateway::types::*;
 
-use crate::impls::cni::Endpoint;
 use crate::state::CacheStore;
+use asupersync::runtime::RuntimeHandle;
 
 pub struct ContainerdProvider {
     pub cache: CacheStore,
-    pub resolved_ips: Mutex<HashMap<Endpoint, IpAddr>>,
+    pub handle: RuntimeHandle,
 }
 
 impl ContainerdProvider {
-    pub fn new<P: AsRef<Path>>(path: P) -> Arc<Self> {
+    pub fn new<P: AsRef<Path>>(path: P, handle: RuntimeHandle) -> Arc<Self> {
         Arc::new(ContainerdProvider {
             cache: CacheStore::new(sled::open(path).unwrap()),
-            resolved_ips: Mutex::new(HashMap::new()),
+            handle,
         })
     }
 }

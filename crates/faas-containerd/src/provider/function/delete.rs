@@ -6,6 +6,7 @@ use crate::impls::cni::Endpoint;
 use crate::impls::{backend, cni};
 use crate::provider::ContainerdProvider;
 use crate::state::CacheStore;
+use crate::state::DirtyState;
 use gateway::types::{DeleteError, Query};
 
 /// Release the netns lock for an endpoint. Idempotent — no-op if netns absent.
@@ -31,7 +32,7 @@ pub async fn cleanup_containerd_resources(cache: &CacheStore, endpoint: &Endpoin
             Ok(Err(e)) => log::error!("kill task {}: {:?}", endpoint, e),
             Err(_) => {
                 log::error!("kill task {}: timeout, marking Dirty", endpoint);
-                cache.mark_dirty(endpoint, "kill_task timeout").ok();
+                cache.mark_dirty(endpoint, DirtyState::Broken("kill_task timeout".into())).ok();
             }
         }
     }
@@ -44,7 +45,7 @@ pub async fn cleanup_containerd_resources(cache: &CacheStore, endpoint: &Endpoin
             Ok(Err(e)) => log::error!("remove snapshot {}: {:?}", endpoint, e),
             Err(_) => {
                 log::error!("remove snapshot {}: timeout, marking Dirty", endpoint);
-                cache.mark_dirty(endpoint, "remove_snapshot timeout").ok();
+                cache.mark_dirty(endpoint, DirtyState::Broken("remove_snapshot timeout".into())).ok();
             }
         }
     }
@@ -57,7 +58,7 @@ pub async fn cleanup_containerd_resources(cache: &CacheStore, endpoint: &Endpoin
             Ok(Err(e)) => log::error!("delete container {}: {:?}", endpoint, e),
             Err(_) => {
                 log::error!("delete container {}: timeout, marking Dirty", endpoint);
-                cache.mark_dirty(endpoint, "delete_container timeout").ok();
+                cache.mark_dirty(endpoint, DirtyState::Broken("delete_container timeout".into())).ok();
             }
         }
     }
@@ -81,10 +82,10 @@ impl ContainerdProvider {
         let endpoint: Endpoint = function.into();
         log::info!("Deleting function: {:?}", endpoint);
 
-        cleanup_containerd_resources(&self.cache, &endpoint).await;
+        // Mark dirty before touching any resources
+        self.cache.mark_dirty(&endpoint, DirtyState::Deleting).ok();
 
-        // Remove from in-memory IP cache
-        self.resolved_ips.lock().unwrap().remove(&endpoint);
+        cleanup_containerd_resources(&self.cache, &endpoint).await;
 
         // Release netns lock — always, regardless of cleanup outcome.
         release_netns_lock(&endpoint).await;
@@ -99,23 +100,5 @@ impl ContainerdProvider {
 
         log::info!("Function {} deleted", endpoint);
         Ok(())
-    }
-
-    /// Attempt recovery of a Dirty endpoint from the startup scan.
-    /// Tries to clean up leftover containerd resources, then removes
-    /// the sled record if successful.  The caller handles retries.
-    pub async fn recover_dirty(&self, endpoint: &Endpoint, _reason: &str) {
-        cleanup_containerd_resources(&self.cache, endpoint).await;
-
-        // Remove from in-memory IP cache
-        self.resolved_ips.lock().unwrap().remove(endpoint);
-
-        // Release any stray netns that might be holding a lock.
-        release_netns_lock(endpoint).await;
-
-        // If cleanup cleared the containerd resources, also clear sled
-        if self.cache.is_dirty(endpoint).unwrap_or(true) {
-            self.cache.remove(endpoint).ok();
-        }
     }
 }

@@ -7,18 +7,35 @@ use serde::{Deserialize, Serialize};
 
 use crate::impls::cni::Endpoint;
 
-/// Deployment metadata stored in sled as a JSON blob.
+/// Tracks the lifecycle state of a function beyond what netns alone captures.
 ///
-/// `dirty` is `Some(reason)` only when containerd resources exist but
-/// netns does not and CNI reconstruction failed. This is the sole
-/// remaining case that netns cannot represent on its own.
+/// `Clean` → function is healthy (netns may or may not be present — resolve
+/// checks netns as fast path regardless of dirty state).
+///
+/// In-progress states (`Deploying`, `Deleting`, `Repairing`) are transient
+/// locks: resolve returns `Busy` (503) so the caller retries. On crash,
+/// startup scan promotes these to `Broken`.
+///
+/// `Broken(reason)` is terminal: resolve returns `Unavailable` (502).
+/// Only a new deploy/delete can clear it.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DirtyState {
+    #[default]
+    Clean,
+    Deploying,
+    Deleting,
+    Repairing,
+    Broken(String),
+}
+
+/// Deployment metadata stored in sled as a JSON blob.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DeployMeta {
     pub image: String,
     pub created_at: u64,
     pub labels: HashMap<String, String>,
     #[serde(default)]
-    pub dirty: Option<String>,
+    pub dirty: DirtyState,
 }
 
 /// Lightweight sled wrapper with JSON-based CRUD.
@@ -76,35 +93,35 @@ impl CacheStore {
         Ok(())
     }
 
-    /// Mark an endpoint as dirty by setting the dirty field.
+    /// Set the dirty state on a record, creating it if absent.
     pub fn mark_dirty(
         &self,
         endpoint: &Endpoint,
-        reason: &str,
+        state: DirtyState,
     ) -> Result<(), CacheStoreError> {
         let mut meta = self.get(endpoint)?.unwrap_or_else(|| DeployMeta {
             image: String::new(),
             created_at: 0,
             labels: HashMap::new(),
-            dirty: None,
+            dirty: DirtyState::Clean,
         });
-        meta.dirty = Some(reason.to_string());
+        meta.dirty = state;
         self.insert(endpoint, &meta)
     }
 
-    /// Clear the dirty flag on a record.
+    /// Clear the dirty flag — sets state to Clean.
     pub fn clear_dirty(&self, endpoint: &Endpoint) -> Result<(), CacheStoreError> {
         if let Some(mut meta) = self.get(endpoint)? {
-            meta.dirty = None;
+            meta.dirty = DirtyState::Clean;
             self.insert(endpoint, &meta)?;
         }
         Ok(())
     }
 
-    /// Check whether an endpoint has the dirty flag set.
+    /// Check whether an endpoint has a non-Clean dirty state.
     pub fn is_dirty(&self, endpoint: &Endpoint) -> Result<bool, CacheStoreError> {
         match self.get(endpoint)? {
-            Some(meta) => Ok(meta.dirty.is_some()),
+            Some(meta) => Ok(!matches!(meta.dirty, DirtyState::Clean)),
             None => Ok(false),
         }
     }
@@ -145,10 +162,27 @@ mod tests {
                 m.insert("env".into(), "prod".into());
                 m
             },
-            dirty: None,
+            dirty: DirtyState::Clean,
         };
         let json = serde_json::to_vec(&meta).unwrap();
         let roundtripped: DeployMeta = serde_json::from_slice(&json).unwrap();
         assert_eq!(meta, roundtripped);
+    }
+
+    #[test]
+    fn test_dirty_state_serde() {
+        // Verify all variants serialize/deserialize
+        let variants = vec![
+            DirtyState::Clean,
+            DirtyState::Deploying,
+            DirtyState::Deleting,
+            DirtyState::Repairing,
+            DirtyState::Broken("test reason".into()),
+        ];
+        for v in variants {
+            let json = serde_json::to_vec(&v).unwrap();
+            let rt: DirtyState = serde_json::from_slice(&json).unwrap();
+            assert_eq!(v, rt);
+        }
     }
 }

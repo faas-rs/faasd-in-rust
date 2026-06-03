@@ -6,6 +6,9 @@ pub use types::*;
 
 use std::sync::Arc;
 
+use std::collections::HashMap;
+use std::sync::Mutex;
+
 use asupersync::http::h1::listener::Http1Listener;
 use asupersync::http::h1::client::Http1Client;
 use asupersync::http::h1::types::{Method, Request, Response, StatusCode};
@@ -13,18 +16,41 @@ use asupersync::runtime::RuntimeHandle;
 use asupersync::net::TcpStream;
 use serde::Deserialize;
 
+/// In-memory IP cache for function endpoints.
+/// Checked before calling backend.resolve() to avoid netns fork on every request.
+pub struct GatewayCache {
+    ips: Mutex<HashMap<Query, http::Uri>>,
+}
+
+impl GatewayCache {
+    pub fn new() -> Self {
+        Self { ips: Mutex::new(HashMap::new()) }
+    }
+}
+
+impl Default for GatewayCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 /// Start the gateway HTTP server dispatching to the given provider.
 pub async fn serve<P: Provider>(
     provider: Arc<P>,
+    cache: Arc<GatewayCache>,
     port: u16,
     handle: &RuntimeHandle,
 ) -> std::io::Result<()> {
     let addr = format!("0.0.0.0:{port}");
     log::info!("Starting gateway on {addr}");
 
-    let listener = Http1Listener::bind(addr, move |req| {
+    let listener = Http1Listener::bind(addr, {
         let p = provider.clone();
-        async move { dispatch(p, req).await }
+        let c = cache.clone();
+        move |req| {
+            let p = p.clone();
+            let c = c.clone();
+            async move { dispatch(p, c, req).await }
+        }
     })
     .await
     .map_err(|e| std::io::Error::other(e.to_string()))?;
@@ -38,7 +64,7 @@ pub async fn serve<P: Provider>(
 
 // ── Route dispatch ──────────────────────────────────────────────────────
 
-async fn dispatch<P: Provider>(provider: Arc<P>, req: Request) -> Response {
+async fn dispatch<P: Provider>(provider: Arc<P>, cache: Arc<GatewayCache>, req: Request) -> Response {
     let method = &req.method;
     let uri = &req.uri;
     let path = uri.split('?').next().unwrap_or(uri);
@@ -76,7 +102,7 @@ async fn dispatch<P: Provider>(provider: Arc<P>, req: Request) -> Response {
                 Some(i) => (&trimmed[..i], &trimmed[i..]),
                 None => (trimmed, "/"),
             };
-            handle_proxy(provider, name, subpath, &req).await
+            handle_proxy(provider, cache, name, subpath, &req).await
         }
         (Method::Get, "/health") => ok_json(serde_json::json!({"status": "ok"})),
         _ => json_response(StatusCode(404), &serde_json::json!({"error": "not found"})),
@@ -145,7 +171,6 @@ async fn handle_delete<P: Provider>(p: Arc<P>, body: &[u8]) -> Response {
     let q = Query {
         function_name: d.function_name,
         namespace: None,
-        cache_miss: false,
     };
     match p.delete(q).await {
         Ok(()) => json_response(StatusCode(202), &serde_json::json!({"status": "accepted"})),
@@ -166,7 +191,6 @@ async fn handle_status<P: Provider>(p: Arc<P>, name: &str, uri: &str) -> Respons
     let q = Query {
         function_name: name.to_string(),
         namespace: ns,
-        cache_miss: false,
     };
     match p.status(q).await {
         Ok(s) => ok_json(serde_json::to_value(s).unwrap_or_default()),
@@ -256,75 +280,83 @@ fn url_decode(s: &str) -> String {
 
 // ── Function invocation proxy ───────────────────────────────────────────
 
-/// Proxy an incoming function invocation to the resolved container.
-///
-/// Two-level resolve:
-/// 1. Fast path (`cache_miss=false`): sled cache → proxy request
-/// 2. Retry  (`cache_miss=true`):  netns ground truth → proxy request
+/// Proxy with two-level resolve:
+/// Level 1 — check local cache (HashMap, TCP fail → evict and retry).
+/// Level 2 — ground truth (netns): resolve 404 → 404, proxy fail → 502.
 async fn handle_proxy<P: Provider>(
     p: Arc<P>,
+    cache: Arc<GatewayCache>,
     function_name: &str,
     subpath: &str,
     req: &Request,
 ) -> Response {
-    let fast = Query {
+    let query = Query {
         function_name: function_name.to_string(),
         namespace: None,
-        cache_miss: false,
     };
 
-    if let Ok(uri) = p.resolve(fast).await
-        && let Ok(r) = proxy_request(uri, subpath, req).await
+    // Level 1: check local cache
     {
-        return r;
+        let cached = cache.ips.lock().unwrap().get(&query).cloned();
+        if let Some(uri) = cached {
+            if let Some(r) = proxy_request(uri, subpath, req).await {
+                return r;
+            }
+            // TCP connect failed — cached IP stale, evict and fall through
+            cache.ips.lock().unwrap().remove(&query);
+        }
     }
 
-    // Retry: ground truth via netns
-    let ground_truth = Query {
-        function_name: function_name.to_string(),
-        namespace: None,
-        cache_miss: true,
-    };
-
-    match p.resolve(ground_truth).await {
-        Ok(uri) => match proxy_request(uri, subpath, req).await {
-            Ok(r) => r,
-            Err(status) => error_response(status, "proxy connection failed after retry"),
-        },
-        Err(e) => error_response(StatusCode(502), &format!("resolve failed: {e}")),
+    // Level 2: ground truth from backend (netns)
+    match p.resolve(query.clone()).await {
+        Ok(uri) => {
+            // Cache the ground-truth IP
+            cache.ips.lock().unwrap().insert(query.clone(), uri.clone());
+            proxy_request(uri.clone(), subpath, req)
+                .await
+                .unwrap_or_else(|| error_response(StatusCode(502), "upstream unreachable"))
+        }
+        Err(ResolveError::NotFound(msg)) => error_response(StatusCode(404), &msg),
+        Err(ResolveError::Busy(msg)) => {
+            json_response(StatusCode(503), &serde_json::json!({"error": msg}))
+                .with_header("retry-after", "1")
+        }
+        Err(ResolveError::Unavailable(msg)) => error_response(StatusCode(502), &msg),
+        Err(e) => error_response(StatusCode(500), &e.to_string()),
     }
 }
 
 /// Forward a request to the container at `uri` + `subpath`.
 ///
-/// Returns `Ok(Response)` on success, or `Err(StatusCode)` on connection failure.
-async fn proxy_request(
-    uri: http::Uri,
-    subpath: &str,
-    req: &Request,
-) -> Result<Response, StatusCode> {
+/// Returns `None` only when the upstream is unreachable (connect refused,
+/// timeout, or HTTP I/O error). A successful proxy that receives a 4xx/5xx
+/// from the container returns `Some(response)` — it is the caller's job to
+/// relay the status code as-is.
+async fn proxy_request(uri: http::Uri, subpath: &str, req: &Request) -> Option<Response> {
     let host = uri.authority()
         .filter(|a| !a.host().is_empty())
-        .ok_or(StatusCode(502))?;
+        .or_else(|| {
+            log::warn!("proxy: invalid upstream URI {}", uri);
+            None
+        })?;
     let port = host.port_u16().unwrap_or(8080);
     let addr = format!("{}:{}", host.host(), port);
+    let stream = match TcpStream::connect(format!("{}:{}", host.host(), port)).await {
+        Ok(s) => s,
+        Err(e) => {
+            log::warn!("proxy: TCP connect to {} failed: {}", addr, e);
+            return None;
+        }
+    };
 
-    let stream = TcpStream::connect(addr)
-        .await
-        .map_err(|_| StatusCode(502))?;
-
-    // Build proxy request with forwarded method, path, headers, and body
     let proxy_req = Request::builder(req.method.clone(), subpath)
         .headers(
             req.headers
                 .iter()
                 .filter(|(name, _)| {
-                    // Drop hop-by-hop headers
                     let lower = name.to_ascii_lowercase();
-                    lower != "connection"
-                        && lower != "keep-alive"
-                        && lower != "transfer-encoding"
-                        && lower != "te"
+                    lower != "connection" && lower != "keep-alive"
+                        && lower != "transfer-encoding" && lower != "te"
                         && lower != "host"
                 })
                 .cloned(),
@@ -332,11 +364,15 @@ async fn proxy_request(
         .body(req.body.clone())
         .build();
 
-    let resp = Http1Client::request(stream, proxy_req)
-        .await
-        .map_err(|_| StatusCode(502))?;
+    let resp = match Http1Client::request(stream, proxy_req).await {
+        Ok(r) => r,
+        Err(e) => {
+            log::warn!("proxy: HTTP request to {} failed: {}", addr, e);
+            return None;
+        }
+    };
 
-    Ok(Response {
+    Some(Response {
         version: resp.version,
         status: resp.status,
         reason: resp.reason,
