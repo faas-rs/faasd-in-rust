@@ -41,7 +41,7 @@ Client                asupersync              faas-containerd
   │                       │                         │  ...
   │                       ├─ cancel Cx ────────────►│
   │                       │                         ├─ next cx.checkpoint() → Cancelled
-  │                       │                         ├─ deploy() Err branch:
+  │                       │                         ├─ Bracket release phase:
   │                       │                         │    release_deploy() → Absent
   │                       │                         │    cleanup_containerd_resources()
   │                       │                         │      kill_task     [timeout 10s]
@@ -114,7 +114,7 @@ background `handle.spawn()`, and block_on waits for the shutdown signal.
       │    │   ┌─ Current gRPC step completes (or 30s timeout)
       │    │   ├─ next cx.checkpoint() → Cancelled
       │    │   ├─ do_deploy_impl() returns Err(Cancelled)
-      │    │   ├─ deploy() Err branch:
+      │    │   ├─ Bracket release phase (committed=false):
       │    │   │    release_deploy() → Absent
       │    │   │    cleanup_containerd_resources()
       │    │   │      each step: 10s timeout, Dirty on timeout
@@ -157,25 +157,36 @@ Dirty records if any step timed out.
 ## 5. Panic During Deploy
 
 ```
-      ├─ do_deploy_impl() panic!("...")
-      ├─ asupersync catches panic at task boundary
-      ├─ future is DROPPED — no Err branch executed
-      ├─ release_deploy never runs
+      ├─ do_deploy_impl() panics or Cx panicked
+      ├─ Bracket poll catches panic via catch_unwind
+      ├─ transitions to Releasing phase
+      ├─ committed == false → release runs:
+      │    release_deploy() → Absent
+      │    cleanup_containerd_resources()
       │
       ▼
-   ┌─────────────────────────────────────────────┐
-   │ sled state:   InFlight (stale) ⚠️            │
-   │ containerd:   partial deployment state       │
-   │ CNI:          possibly leaked netns/IP       │
-   └─────────────────────────────────────────────┘
+      sled: Absent (or Dirty if cleanup timed out)
+      containerd: clean (or partial if Dirty)
 
-   Next deploy → Conflict 409.  Must manually delete or add stale-InFlight
-   cleanup to startup recovery.
+Panic is no longer a stale-lock hazard.  The Bracket combinator catches
+panics in both use and release phases, and ALWAYS transitions to the
+release function before propagating the panic payload.
 ```
 
-Panic skips drain (unwind bypasses the Err match arm).  `std::panic::catch_unwind`
-around `do_deploy_impl` would fix this; not yet implemented.
+## 6. Panic During Bracket Release Phase
 
+```
+      ├─ Bracket Releasing phase runs cleanup_containerd_resources()
+      ├─ kill_task() panics
+      ├─ Bracket catch_unwind in release poll catches it
+      ├─ phase → Done
+      ├─ panic payload propagated
+      ├─ task boundary catches it (PanicIsolationConfig)
+      │
+      ▼
+      Partial cleanup.  Containerd resources may remain.
+      Startup recovery handles Dirty records from per-step timeouts.
+```
 ---
 
 ## 6. Normal Deploy Success
@@ -253,6 +264,46 @@ try_acquire_deploy → Conflict.  Must manually clean up the Dirty record first.
 
 ---
 
+## Bracket Combinator Design
+
+asupersync's `bracket(acquire, use_fn, release)` combinator replaces the
+hand-rolled `match result { Err(_) => cleanup() }` pattern:
+
+```
+Bracket::new(acquire, use_fn, release)
+  ├─ acquire: Future<Res> → try_acquire_deploy (CAS None→InFlight)
+  ├─ use:     Res → Future<T> → do_deploy_impl + commit_deploy on success
+  └─ release: Res → Future<()> → check committed flag:
+       ├─ committed → no-op (deploy succeeded)
+       └─ !committed → release_deploy + cleanup_containerd_resources
+```
+
+**Guarantees** (enforced by the `Bracket` future's `poll` and `Drop`):
+
+| Scenario | Release runs? | Mechanism |
+|---|---|---|
+| Normal success | Yes | Normal poll: Acquiring→Using→Releasing→Done |
+| Normal failure | Yes | Use returns Err → Releasing phase runs normally |
+| Cancel (Cx cancelled) | Yes | Next checkpoint in use → Cancelled → Releasing |
+| Panic in use | Yes | `catch_unwind` in poll → Releasing phase |
+| Panic in release | Partial | `catch_unwind` catches, propagates, does not block |
+| Future dropped (force) | Best-effort | `Drop` impl: 10,000 poll budget with noop waker |
+
+**Why not hand-rolled Err branch cleanup?**
+
+1. Cancel skips the Err branch (Cx cancelled → error propagates to caller,
+   but the `match` that calls cleanup() is skipped because the task is done)
+2. Panic skips the Err branch entirely
+3. Bracket makes cleanup structural: the runtime guarantees release runs,
+   not a conditional branch the programmer might forget
+
+**Drain vs. Drop**: During graceful shutdown (drain), the Bracket's release
+phase runs through the normal poll path with proper wakers — network calls
+complete, timeouts fire. The Drop path (noop-waker bounded loop) is only
+reached if the future is force-dropped, which our architecture avoids via
+drain-then-exit.
+---
+
 ## Summary Table
 
 | Event | sled after | containerd after | Future ops blocked? |
@@ -264,9 +315,10 @@ try_acquire_deploy → Conflict.  Must manually clean up the Dirty record first.
 | gRPC timeout → cleanup timeout | Dirty(reason) | partial | Yes (Dirty blocks deploy) |
 | SIGINT during deploy | Absent (drain) | cleaned up | No |
 | SIGINT during delete | Absent or Dirty | clean or partial | No (or Dirty blocks deploy) |
-| Panic during deploy | InFlight (stale) ⚠️ | partial ⚠️ | **Yes** |
+| Panic during deploy | Absent (Bracket catches) | cleaned up | No |
+| Panic during deploy release | Absent or Dirty | partial | No (or Dirty blocks) |
 | Panic during delete | Cached or Dirty | partial | No |
 | Update: delete OK, deploy fails | Absent | clean | No (function gone) |
 | Update: delete → Dirty | Dirty | partial | **Yes** (Dirty blocks deploy) |
 
-⚠️ = panic unwinds past cleanup; `catch_unwind` around `do_deploy_impl` would fix.
+Bracket combinator catches panics in use/release phases; release always runs.
