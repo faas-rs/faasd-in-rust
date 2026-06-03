@@ -209,16 +209,6 @@ pub fn delete_cni_network(cx: &asupersync::Cx, endpoint: &Endpoint) -> Result<()
     }
 }
 
-#[inline]
-pub fn check_network_exists(addr: IpAddr) -> bool {
-    use std::process::Command;
-    Command::new("ip")
-        .args(["addr", "show", &addr.to_string()])
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
-}
-
 #[allow(unused)]
 fn cni_gateway() -> Result<String, Err> {
     let content = std::fs::read_to_string(format!(

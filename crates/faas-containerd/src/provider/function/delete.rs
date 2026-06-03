@@ -83,6 +83,9 @@ impl ContainerdProvider {
 
         cleanup_containerd_resources(&self.cache, &endpoint).await;
 
+        // Remove from in-memory IP cache
+        self.resolved_ips.lock().unwrap().remove(&endpoint);
+
         // Release netns lock — always, regardless of cleanup outcome.
         release_netns_lock(&endpoint).await;
 
@@ -103,6 +106,9 @@ impl ContainerdProvider {
     /// the sled record if successful.  The caller handles retries.
     pub async fn recover_dirty(&self, endpoint: &Endpoint, _reason: &str) {
         cleanup_containerd_resources(&self.cache, endpoint).await;
+
+        // Remove from in-memory IP cache
+        self.resolved_ips.lock().unwrap().remove(endpoint);
 
         // Release any stray netns that might be holding a lock.
         release_netns_lock(endpoint).await;

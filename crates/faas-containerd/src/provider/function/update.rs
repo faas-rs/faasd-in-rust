@@ -7,6 +7,7 @@ impl ContainerdProvider {
         let function = Query {
             function_name: param.function_name.clone(),
             namespace: param.namespace.clone(),
+            cache_miss: false,
         };
         self.delete(function).await.map_err(|e| {
             log::error!("failed to delete function when update because {:?}", e);

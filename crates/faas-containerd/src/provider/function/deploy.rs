@@ -53,6 +53,9 @@ impl ContainerdProvider {
 
         let committed = Arc::new(AtomicBool::new(false));
 
+        // Capture a reference to the in-memory IP cache for the use closure.
+        let rips = &self.resolved_ips;
+
         let guard = DeployGuard {
             cache: self.cache.clone(),
             endpoint: endpoint.clone(),
@@ -85,11 +88,12 @@ impl ContainerdProvider {
                 move |g: DeployGuard| {
                     Box::pin(async move {
                         let ip = do_deploy_impl(cx, &g.endpoint, &g.image).await?;
+                // Insert IP into in-memory cache
+                rips.lock().unwrap().insert(g.endpoint.clone(), ip);
                         let now = std::time::SystemTime::now()
                             .duration_since(std::time::UNIX_EPOCH)
                             .map_or(0, |d| d.as_millis() as u64);
                         let meta = DeployMeta {
-                            ip,
                             image: g.image.clone(),
                             created_at: now,
                             labels: HashMap::new(),

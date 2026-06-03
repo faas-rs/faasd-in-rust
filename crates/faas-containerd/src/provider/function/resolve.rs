@@ -2,7 +2,8 @@ use std::net::IpAddr;
 
 use gateway::types::{Query, ResolveError};
 
-use crate::impls::cni::{self, Endpoint};
+use crate::impls::cni::cni_impl;
+use crate::impls::cni::Endpoint;
 use crate::provider::ContainerdProvider;
 
 fn upstream(addr: IpAddr) -> http::Uri {
@@ -10,89 +11,79 @@ fn upstream(addr: IpAddr) -> http::Uri {
 }
 
 impl ContainerdProvider {
-    /// Resolve a function's IP via three-tier fallback.
+    /// Resolve a function's upstream URI.
     ///
-    /// Tier 1: netns exists → read IP from netns, repair sled if stale.
-    /// Tier 2: netns absent but sled has record → check containerd for
-    ///          running container; if found, return cached IP (stale but
-    ///          still routable via CNI bridge), mark dirty.
-    /// Tier 3: netns absent, no sled record → 404.
+    /// Two-level routing controlled by `Query::cache_miss`:
+    /// - `false` (fast path): sled cache only → hit or 404.
+    /// - `true`  (ground truth): netns → update sled → return IP;
+    ///   netns absent checks containerd; uses sled as last-resort fallback.
     pub async fn resolve(&self, query: Query) -> Result<http::Uri, ResolveError> {
-        let endpoint = Endpoint::from(query);
-        log::trace!("Resolving function: {:?}", endpoint);
+        let endpoint = Endpoint::from(query.clone());
+        log::trace!("Resolving: {:?}", endpoint);
 
-        // Tier 1: netns is truth — always check it first when possible
-        if let Some(ip) = cni::cni_impl::netns_get_ip(&endpoint) {
-            // netns has IP → verify/repair sled cache
-            let meta = match self.cache.get(&endpoint) {
-                Ok(Some(m)) => m,
-                Ok(None) => {
-                    // netns exists but sled missing — crash recovery gap repair
-                    log::warn!("netns exists for {} but sled record missing; repairing", endpoint);
-                    let now = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .map_or(0, |d| d.as_millis() as u64);
-                    let repair = crate::state::DeployMeta {
-                        ip,
-                        image: String::new(),
-                        created_at: now,
-                        labels: std::collections::HashMap::new(),
-                        dirty: Some("crash recovery: sled record missing".into()),
-                    };
-                    self.cache.insert(&endpoint, &repair).ok();
-                    return Ok(upstream(ip));
-                }
-                Err(_) => return Ok(upstream(ip)), // sled error, but netns is truth
-            };
-            // IP mismatch: netns IP changed (e.g. CNI rebuilt). Trust netns.
-            if meta.ip != ip {
-                log::warn!(
-                    "IP mismatch for {}: sled={}, netns={}; updating sled",
-                    endpoint, meta.ip, ip
-                );
-                self.cache.insert(
-                    &endpoint,
-                    &crate::state::DeployMeta { ip, ..meta },
-                ).ok();
-            } else {
-                // IP matches → cache is fresh, optionally clear stale dirty flag
-                if meta.dirty.is_some() {
-                    self.cache.clear_dirty(&endpoint).ok();
-                }
-            }
+        if query.cache_miss {
+            // Ground truth
+            self.resolve_ground_truth(&endpoint).await
+        } else {
+            // Fast path: sled cache only
+            self.resolve_fast(&endpoint)
+        }
+    }
+
+    /// Fast path: sled cache lookup only.
+    fn resolve_fast(&self, endpoint: &Endpoint) -> Result<http::Uri, ResolveError> {
+        match self.resolved_ips.lock().unwrap().get(endpoint) {
+            Some(ip) => Ok(upstream(*ip)),
+            None => Err(ResolveError::NotFound(format!(
+                "function {} not found in cache",
+                endpoint
+            ))),
+        }
+    }
+
+    /// Ground truth: netns → containerd container check → sled fallback.
+    async fn resolve_ground_truth(
+        &self,
+        endpoint: &Endpoint,
+    ) -> Result<http::Uri, ResolveError> {
+        if let Some(ip) = cni_impl::netns_get_ip(endpoint) {
+            // netns has IP → cache it, repair sled dirty flags, return IP
+            self.resolved_ips.lock().unwrap().insert(endpoint.clone(), ip);
+            self.repair_sled_from_netns(endpoint);
             return Ok(upstream(ip));
         }
 
-        // Tier 2: netns absent, check sled cache
-        match self.cache.get(&endpoint) {
-            Ok(Some(meta)) => {
-                // netns absent, sled has record — check if container still exists
-                if crate::impls::backend().container_exists(&endpoint).await {
-                    // Container alive but netns gone — last resort, return cached IP
-                    log::warn!(
-                        "netns absent for {} but container exists; returning cached IP {}",
-                        endpoint, meta.ip
-                    );
-                    self.cache.mark_dirty(
-                        &endpoint,
-                        "netns absent, containerd container still exists"
-                    ).ok();
-                    return Ok(upstream(meta.ip));
-                }
-                // Container gone too — clean up sled
-                log::info!(
-                    "netns and container absent for {}; removing sled record", endpoint
-                );
-                self.cache.remove(&endpoint).ok();
-                Err(ResolveError::NotFound("container not found".to_string()))
-            }
-            Ok(None) => {
-                Err(ResolveError::NotFound("container not found".to_string()))
-            }
-            Err(e) => {
-                log::error!("Cache read failed for {}: {:?}", endpoint, e);
-                Err(ResolveError::Internal(e.to_string()))
-            }
+        // netns absent — check containerd for running container
+        // Container alive but netns gone — try sled cache as last resort
+        if crate::impls::backend().container_exists(endpoint).await
+            && let Some(ip) = self.resolved_ips.lock().unwrap().get(endpoint).copied()
+        {
+            log::warn!(
+                "netns absent for {} but container exists; returning cached IP {}",
+                endpoint, ip
+            );
+            self.cache.mark_dirty(
+                endpoint,
+                "netns absent, container still exists",
+            ).ok();
+            return Ok(upstream(ip));
+        }
+
+        // Container gone too — clean sled, return 404
+        log::info!("netns and container absent for {}; removing sled record", endpoint);
+        self.cache.remove(endpoint).ok();
+        Err(ResolveError::NotFound(format!(
+            "function {} not found (netns + container absent)",
+            endpoint
+        )))
+    }
+
+    /// Repair sled cache with IP from netns — crash recovery / drift correction.
+    fn repair_sled_from_netns(&self, endpoint: &Endpoint) {
+        if let Ok(Some(meta)) = self.cache.get(endpoint)
+            && meta.dirty.is_some()
+        {
+            self.cache.clear_dirty(endpoint).ok();
         }
     }
 }

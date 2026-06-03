@@ -65,11 +65,13 @@ async fn startup_netns_scan(
         if backend().container_exists(&endpoint).await {
             // Container intact → repair sled from netns
             if let Some(ip) = faas_containerd::impls::cni::cni_impl::netns_get_ip(&endpoint) {
+                // Insert into in-memory IP cache
+                provider.resolved_ips.lock().unwrap().insert(endpoint.clone(), ip);
+
                 let now = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .map_or(0, |d| d.as_millis() as u64);
                 let meta = faas_containerd::state::DeployMeta {
-                    ip,
                     image: String::new(),
                     created_at: now,
                     labels: std::collections::HashMap::new(),

@@ -3,8 +3,6 @@
 //! sled is a write-through performance cache used only by list() and resolve().
 
 use std::collections::HashMap;
-use std::net::IpAddr;
-
 use serde::{Deserialize, Serialize};
 
 use crate::impls::cni::Endpoint;
@@ -16,7 +14,6 @@ use crate::impls::cni::Endpoint;
 /// remaining case that netns cannot represent on its own.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DeployMeta {
-    pub ip: IpAddr,
     pub image: String,
     pub created_at: u64,
     pub labels: HashMap<String, String>,
@@ -86,7 +83,6 @@ impl CacheStore {
         reason: &str,
     ) -> Result<(), CacheStoreError> {
         let mut meta = self.get(endpoint)?.unwrap_or_else(|| DeployMeta {
-            ip: std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
             image: String::new(),
             created_at: 0,
             labels: HashMap::new(),
@@ -142,7 +138,6 @@ mod tests {
     #[test]
     fn test_deploy_meta_serde_roundtrip() {
         let meta = DeployMeta {
-            ip: "10.66.0.5".parse().unwrap(),
             image: "alpine:latest".into(),
             created_at: 1717430000000,
             labels: {
